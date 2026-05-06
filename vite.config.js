@@ -9,5 +9,14 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000',
     },
+    watch: {
+      ignored: ['**/smartHire/**']
+    }
   },
+  resolve: {
+    preserveSymlinks: false,
+  },
+  optimizeDeps: {
+    entries: ['index.html', 'src/**/*.{js,ts,jsx,tsx}']
+  }
 })

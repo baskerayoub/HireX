@@ -11,10 +11,23 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google/genai": "^1.51.0",
+    "@google/generative-ai": "^0.24.1",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "mysql2": "^3.22.0"
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "mysql2": "^3.22.0",
+    "nodemailer": "^8.0.7",
+    "openai": "^6.35.0",
+    "pdf-parse": "^2.4.5",
+    "sequelize": "^6.37.8",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "sequelize-cli": "^6.6.5"
   }
 }

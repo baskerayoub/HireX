@@ -1,5 +1,5 @@
 import { Renderer, Program, Mesh, Triangle } from 'ogl';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
 function hexToVec4(hex) {
   let hexStr = hex.replace('#', '');
@@ -102,10 +102,12 @@ void main() {
 }
 `;
 
-export default function Balatro({
+const DEFAULT_OFFSET = [0, 0];
+
+function Balatro({
   spinRotation = -2.0,
   spinSpeed = 9.0,
-  offset = [0.0, 0.0],
+  offset = DEFAULT_OFFSET,
   color1 = '#DE443B',
   color2 = '#006BB4',
   color3 = '#162325',
@@ -205,7 +207,6 @@ export default function Balatro({
     spinEase,
     isRotate,
     mouseInteraction,
-    containerRef
   ]);
 
   return (
@@ -245,3 +246,5 @@ export default function Balatro({
     </div>
   );
 }
+
+export default memo(Balatro);

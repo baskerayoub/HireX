@@ -3,52 +3,45 @@ export function cn(...classes) {
 }
 
 export const shellClass =
-  'relative min-h-screen overflow-hidden bg-[#07111f] text-[#eef5ff] font-[Aptos,Segoe_UI,Trebuchet_MS,sans-serif]'
+  'relative min-h-screen bg-[#f5f7fb] text-slate-900 font-[Aptos,Segoe_UI,Trebuchet_MS,sans-serif]'
 
 export const frameClass = 'relative z-10 mx-auto w-full'
 
-export const displayFontClass = 'font-[Georgia,Times_New_Roman,serif]'
+export const displayFontClass = 'font-semibold tracking-[-0.04em] text-slate-900'
 
 export const glassPanelClass =
-  'relative overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/60 shadow-[0_28px_90px_rgba(0,0,0,0.32)] backdrop-blur-xl'
+  'relative overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm'
 
 export const panelHighlightClass =
-  'pointer-events-none absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-[#4de2c5]/10 opacity-70'
+  'pointer-events-none absolute inset-0 bg-transparent opacity-0'
 
 export const pillClass =
-  'inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-[#eef5ff]'
+  'inline-flex items-center gap-2 rounded-full border border-prpl/20 bg-prpl/5 px-4 py-2 text-[0.78rem] font-semibold tracking-wide text-prpl'
 
 export const sectionLabelClass =
-  'mb-3 text-[0.84rem] font-bold uppercase tracking-[0.12em] text-slate-400'
+  'mb-3 text-[0.84rem] font-bold uppercase tracking-[0.12em] text-slate-500'
 
-export const bodyTextClass = 'text-base leading-7 text-slate-300/80'
+export const bodyTextClass = 'text-base leading-7 text-slate-600'
 
 export const inputClass =
-  'w-full rounded-[18px] border border-white/10 bg-slate-950/80 px-4 py-4 text-[#eef5ff] outline-none transition duration-200 placeholder:text-slate-400/60 focus:-translate-y-0.5 focus:border-[#4de2c5]/60 focus:ring-4 focus:ring-[#4de2c5]/10'
+  'h-[62px] w-full rounded-lg bg-white px-5 pr-14 text-[1.02rem] text-slate-800 outline-none border border-slate-200 transition focus-within:border-prpl focus-within:shadow-[0_0_0_2px_rgba(85,35,233,0.10)] placeholder:text-slate-400'
 
 export const primaryButtonClass =
-  'rounded-[18px] border border-transparent bg-gradient-to-r from-[#4de2c5] to-[#7fffe3] px-5 py-4 font-bold text-[#052029] shadow-[0_18px_38px_rgba(77,226,197,0.24)] transition duration-200 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70'
+  'rounded-xl border border-transparent bg-prpl px-5 py-4 font-bold text-white shadow-[0_14px_24px_rgba(85,35,233,0.15)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_28px_rgba(85,35,233,0.25)] disabled:cursor-wait disabled:opacity-70'
 
 export const secondaryButtonClass =
-  'rounded-[18px] border border-white/10 bg-white/5 px-5 py-4 font-bold text-[#eef5ff] transition duration-200 hover:-translate-y-0.5 hover:bg-white/10'
+  'rounded-xl border border-slate-200 bg-white px-5 py-4 font-bold text-slate-700 transition hover:-translate-y-0.5 hover:border-prpl/40 hover:shadow-[0_14px_24px_rgba(85,35,233,0.05)]'
 
-export const insetCardClass = 'relative rounded-[24px] border border-white/10 bg-white/5'
+export const insetCardClass = 'relative rounded-[16px] border border-slate-100 bg-slate-50/50'
 
 export function BackgroundOrbs() {
-  return (
-    <>
-      <div className="pointer-events-none absolute -left-32 top-10 h-80 w-80 rounded-full bg-gradient-to-br from-[#4de2c5]/30 to-transparent blur-3xl motion-safe:animate-pulse" />
-      <div className="pointer-events-none absolute -right-24 bottom-12 h-96 w-96 rounded-full bg-gradient-to-br from-[#ff8a5b]/25 to-transparent blur-3xl motion-safe:animate-pulse" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-white/5 to-transparent" />
-    </>
-  )
+  return null; // No orbs for light mode
 }
 
-export function GlassPanel({ as: Tag = 'section', className = '', children }) {
+export function GlassPanel({ as: Component = 'section', className = '', children }) {
   return (
-    <Tag className={cn(glassPanelClass, className)}>
-      <div aria-hidden="true" className={panelHighlightClass} />
+    <Component className={cn(glassPanelClass, className)}>
       <div className="relative z-10">{children}</div>
-    </Tag>
+    </Component>
   )
 }

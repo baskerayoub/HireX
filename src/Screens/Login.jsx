@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
 import { Eye, EyeOff, Mail, UserRound } from 'lucide-react'
 import { FaApple, FaFacebookF } from 'react-icons/fa'
 import { FcGoogle } from 'react-icons/fc'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import Balatro from '../components/Background';
 
 
@@ -66,7 +66,7 @@ function AuthField({
   trailingAction = null,
 }) {
   return (
-    <div className="group relative overflow-y-hidden">
+    <div className="group relative">
       <label
         htmlFor={id}
         className="pointer-events-none absolute left-4 top-0 z-10 -translate-y-1/2 bg-white px-2 text-[0.95rem] font-medium text-slate-400 transition group-focus-within:text-prpl"
@@ -115,13 +115,11 @@ export default function Login() {
 
   const currentForm = mode === 'login' ? loginForm : signupForm
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('user')
+  const { login, signup, user } = useAuth()
 
-    if (savedUser) {
-      navigate('/dashboard', { replace: true })
-    }
-  }, [navigate])
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   function switchMode(nextMode) {
     setMode(nextMode)
@@ -152,36 +150,34 @@ export default function Login() {
 
     try {
       if (mode === 'login') {
-        const response = await axios.post('/api/login', loginForm)
+        const result = await login(loginForm.email, loginForm.password);
 
-        if (response.data.user) {
-          localStorage.setItem('user', JSON.stringify(response.data.user))
+        if (result.success) {
           setMessage({
             type: 'success',
             text: 'Login successful.',
           })
           navigate('/dashboard', { replace: true })
+        } else {
+          setMessage({ type: 'error', text: result.error });
         }
-
         return
       }
 
-      const response = await axios.post('/api/signup', signupForm)
-
-      setMessage({
-        type: 'success',
-        text: response.data.message,
-      })
-      setLoginForm({
-        email: signupForm.email,
-        password: signupForm.password,
-      })
-      setSignupForm(emptySignupForm)
-      setMode('login')
-    } catch (error) {
+      const result = await signup(signupForm);
+      if (result.success) {
+        setMessage({
+          type: 'success',
+          text: 'Account created successfully!',
+        })
+        navigate('/dashboard', { replace: true })
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
+    } catch {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Something went wrong. Please try again.',
+        text: 'Something went wrong. Please try again.',
       })
     } finally {
       setLoading(false)
@@ -202,17 +198,17 @@ export default function Login() {
   )
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] font-[Aptos,Segoe_UI,Trebuchet_MS,sans-serif] text-slate-900">
-      <section className="grid min-h-screen lg:grid-cols-2">
-        <div className="flex min-h-screen flex-col bg-white px-6 py-8 sm:px-10 lg:px-12 xl:px-14">
+    <main className="min-h-svh bg-[#f5f7fb] font-[Aptos,Segoe_UI,Trebuchet_MS,sans-serif] text-slate-900">
+      <section className="grid min-h-svh lg:grid-cols-2">
+        <div className="flex min-h-svh flex-col bg-white px-6 py-8 sm:px-10 lg:px-12 xl:px-14">
           <div className="flex items-center">
             <div className="font-splatink text-[2.8rem] leading-none text-prpl sm:text-[2.5rem]">
               {brandName}
             </div>
           </div>
 
-          <div className="flex flex-1 items-center justify-center py-10 lg:py-14">
-            <div className="w-full max-w-[388px]">
+          <div className="flex flex-1 justify-center pt-10 pb-8 lg:pt-14 lg:pb-12">
+            <div className="flex w-full max-w-[388px] flex-col sm:min-h-[700px]">
               <p className="text-[1.08rem] font-medium text-slate-600">
                 {isSignup ? 'Start your journey' : 'Welcome back'}
               </p>
@@ -271,20 +267,22 @@ export default function Login() {
                 </button>
               </form>
 
-              {message.text ? (
-                <div
-                  className={cn(
-                    'mt-5 rounded-lg border px-4 py-3 text-[0.98rem] leading-7',
-                    message.type === 'success'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-red-200 bg-red-50 text-red-600',
-                  )}
-                >
-                  {message.text}
-                </div>
-              ) : null}
-                    
-              <div className="pt-8 text-[1.05rem] text-slate-500 text-center">
+                {message.text ? (
+              <div className="mt-7 min-h-[84px]">
+                  <div
+                    className={cn(
+                      'rounded-lg border px-4 py-3 text-[0.98rem] leading-7',
+                      message.type === 'success'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-red-200 bg-red-50 text-red-600',
+                    )}
+                  >
+                    {message.text}
+                  </div>
+              </div>
+                ) : null}
+
+              <div className="text-center text-[1.05rem] mt-8 text-slate-500">
                 <span>{isSignup ? 'Have an account? ' : "Don't have an account? "}</span>
                 <button
                   type="button"
@@ -295,30 +293,30 @@ export default function Login() {
                 </button>
               </div>
 
+              <div className="mt-10 sm:mt-auto sm:pt-10">
+                <div className="flex items-center gap-3 text-[1rem] text-slate-400">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span>{isSignup ? 'or sign up with' : 'or sign in with'}</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
 
-
-              <div className="mt-12 flex items-center gap-3 text-[1rem] text-slate-400">
-                <div className="h-px flex-1 bg-slate-200" />
-                <span>{isSignup ? 'or sign up with' : 'or sign in with'}</span>
-                <div className="h-px flex-1 bg-slate-200" />
-              </div>
-
-              <div className="mt-8 grid grid-cols-3 gap-4">
-                {socialProviders.map((provider) => (
-                  <SocialButton
-                    key={provider.label}
-                    label={provider.label}
-                    Icon={provider.icon}
-                    className={provider.className}
-                  />
-                ))}
+                <div className="mt-8 grid grid-cols-3 gap-4">
+                  {socialProviders.map((provider) => (
+                    <SocialButton
+                      key={provider.label}
+                      label={provider.label}
+                      Icon={provider.icon}
+                      className={provider.className}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
         </div>
 
-        <div className="relative hidden min-h-screen overflow-hidden border-l border-[#162325] lg:block">
+        <div className="relative hidden min-h-svh overflow-hidden border-l border-[#162325] lg:block">
                 <Balatro
                 isRotate={false}
                 mouseInteraction
