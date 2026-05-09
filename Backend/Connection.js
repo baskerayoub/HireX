@@ -61,7 +61,7 @@ if (require.main === module) {
   db.sequelize.authenticate()
     .then(() => {
       console.log("✅ Sequelize connected to MySQL");
-      return db.sequelize.sync({ alter: true });
+      return db.sequelize.sync();
     })
     .then(() => {
       console.log("✅ Database synced");

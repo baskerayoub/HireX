@@ -42,6 +42,22 @@ exports.create = async (req, res) => {
   }
 };
 
+exports.listAll = async (req, res) => {
+  try {
+    const meetings_list = await meeting.findAll({
+      include: [
+        { model: candidate, as: "Candidate", attributes: ["id", "name", "email"] },
+        { model: users, as: "User", attributes: ["id", "firstName", "lastName"] },
+        { model: feedback, as: "Feedback" },
+      ],
+      order: [["start_date", "DESC"]],
+    });
+    return res.json({ meetings: meetings_list });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to list meetings" });
+  }
+};
+
 exports.listByCandidate = async (req, res) => {
   try {
     const meetings = await meeting.findAll({
@@ -94,11 +110,62 @@ exports.update = async (req, res) => {
 
 exports.cancel = async (req, res) => {
   try {
-    const mtg = await meeting.findByPk(req.params.id);
+    const mtg = await meeting.findByPk(req.params.id, {
+      include: [{ model: candidate, as: "Candidate", attributes: ["id", "name", "email"] }],
+    });
     if (!mtg) return res.status(404).json({ error: "Meeting not found" });
-    await mtg.update({ status: "Cancelled" });
+
+    // Send cancellation email if requested
+    if (req.body.sendEmail && mtg.Candidate?.email) {
+      try {
+        const s = new Date(mtg.start_date);
+        await emailService.sendNotification({
+          to: mtg.Candidate.email,
+          subject: `Interview Cancelled: ${mtg.subject || "Interview"}`,
+          message: `Dear ${mtg.Candidate.name || "Candidate"},<br><br>We regret to inform you that your interview <strong>"${mtg.subject || "Interview"}"</strong> scheduled for <strong>${s.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</strong> at <strong>${s.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</strong> has been cancelled.<br><br>We apologize for any inconvenience. Our recruitment team will be in touch if there are any updates regarding your application.<br><br>Best regards,<br><strong>The HireX Team</strong>`,
+        });
+        await mtg.update({ status: "Cancelled", status_message: "Cancelled — email sent" });
+      } catch (emailErr) {
+        await mtg.update({ status: "Cancelled", status_message: "Cancelled — email failed: " + emailErr.message });
+      }
+    } else {
+      await mtg.update({ status: "Cancelled" });
+    }
+
     return res.json({ message: "Meeting cancelled" });
   } catch (error) {
     return res.status(500).json({ error: "Failed to cancel meeting" });
+  }
+};
+
+exports.delete = async (req, res) => {
+  try {
+    const mtg = await meeting.findByPk(req.params.id, {
+      include: [{ model: candidate, as: "Candidate", attributes: ["id", "name", "email"] }],
+    });
+    if (!mtg) return res.status(404).json({ error: "Meeting not found" });
+
+    // Send cancellation email if requested
+    if (req.body.sendEmail && mtg.Candidate?.email) {
+      try {
+        const s = new Date(mtg.start_date);
+        await emailService.sendNotification({
+          to: mtg.Candidate.email,
+          subject: `Interview Cancelled: ${mtg.subject || "Interview"}`,
+          message: `Dear ${mtg.Candidate.name || "Candidate"},<br><br>We regret to inform you that your interview <strong>"${mtg.subject || "Interview"}"</strong> scheduled for <strong>${s.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</strong> at <strong>${s.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</strong> has been cancelled.<br><br>We apologize for any inconvenience. Our recruitment team will be in touch if there are any updates regarding your application.<br><br>Best regards,<br><strong>The HireX Team</strong>`,
+        });
+      } catch (emailErr) {
+        console.error("Cancellation email failed:", emailErr.message);
+      }
+    }
+
+    // Delete associated feedback first
+    await feedback.destroy({ where: { fk_meeting: mtg.id } });
+    await mtg.destroy();
+
+    return res.json({ message: "Meeting deleted" });
+  } catch (error) {
+    console.error("Delete meeting error:", error);
+    return res.status(500).json({ error: "Failed to delete meeting" });
   }
 };

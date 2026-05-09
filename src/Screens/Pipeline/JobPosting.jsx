@@ -4,6 +4,7 @@ import { profilesApi, aiApi, linkedinApi } from '../../api';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { useToast } from '../../contexts/ToastContext';
 import { Share2, Sparkles, Copy, CheckCircle, ExternalLink, FileText } from 'lucide-react';
 import { FaLinkedinIn } from 'react-icons/fa';
 
@@ -20,6 +21,7 @@ export default function JobPosting() {
   const [publishMsg, setPublishMsg] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const toast = useToast();
 
   useEffect(() => {
     async function load() {
@@ -63,7 +65,7 @@ export default function JobPosting() {
       });
       setIsEditing(false);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to generate description');
+      toast.error(err.response?.data?.error || 'Failed to generate description');
     } finally { setGenerating(false); }
   };
 
@@ -92,10 +94,10 @@ export default function JobPosting() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Job Publication</h1>
-          <p className="text-slate-500 text-sm mt-1">Generate AI descriptions & publish to platforms</p>
+          <h1 className="text-[1.85rem] font-bold text-slate-900 dark:text-slate-50 tracking-tight">Job Publication</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Generate AI descriptions & publish to platforms</p>
         </div>
       </div>
 
@@ -106,23 +108,23 @@ export default function JobPosting() {
           {/* Left: Profile selector + AI Generator */}
           <div className="lg:col-span-2 space-y-6">
             {/* Profile selector */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-5">
-              <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Select Position</label>
+            <div className="rounded-2xl surface-primary p-5">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500 mb-3">Select Position</label>
               <div className="flex gap-2 flex-wrap">
                 {profiles.map(p => (
                   <button key={p.id} onClick={() => { setSelectedProfile(p); setAiDescription(null); }}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition ${selectedProfile?.id === p.id ? 'bg-prpl text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition ${selectedProfile?.id === p.id ? 'bg-gradient-to-r from-prpl to-purple-600 text-white shadow-[0_4px_12px_rgba(124,58,237,0.3)]' : 'bg-slate-50/80 dark:bg-white/[0.04] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.06] border border-slate-200/50 dark:border-white/[0.04]'}`}>
                     {p.title}
                   </button>
                 ))}
               </div>
               {selectedProfile && (
-                <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="mt-4 pt-4 border-t border-slate-200/40 dark:border-white/[0.04]">
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="px-2 py-1 bg-prpl/8 text-prpl rounded-full font-medium">📍 {selectedProfile.location || 'Remote'}</span>
-                    <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-full font-medium">💼 {selectedProfile.yearsOfExperience || '0'}+ years</span>
+                    <span className="px-2.5 py-1 bg-prpl/8 dark:bg-prpl/12 text-prpl rounded-full font-medium">📍 {selectedProfile.location || 'Remote'}</span>
+                    <span className="px-2.5 py-1 bg-blue-500/8 dark:bg-blue-500/12 text-blue-600 dark:text-blue-400 rounded-full font-medium">💼 {selectedProfile.yearsOfExperience || '0'}+ years</span>
                     {selectedProfile.technicalSkills?.split(',').slice(0, 5).map((s, i) => (
-                      <span key={i} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{s.trim()}</span>
+                      <span key={i} className="px-2.5 py-1 bg-slate-50/80 dark:bg-white/[0.04] text-slate-600 dark:text-slate-300 rounded-full border border-slate-200/40 dark:border-white/[0.04]">{s.trim()}</span>
                     ))}
                   </div>
                 </div>
@@ -130,9 +132,9 @@ export default function JobPosting() {
             </div>
 
             {/* AI Generator */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-5">
+            <div className="rounded-2xl surface-primary p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-prpl" /> AI Job Description Generator
                 </h2>
                 <div className="flex items-center gap-3">
@@ -153,12 +155,12 @@ export default function JobPosting() {
                       } else {
                         setIsEditing(true);
                       }
-                    }} className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition shadow-sm">
+                    }} className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200/60 dark:border-white/[0.06] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition">
                       {isEditing ? 'Save Changes' : 'Edit Description'}
                     </button>
                   )}
                   <button onClick={handleGenerate} disabled={generating || !selectedProfile}
-                    className="inline-flex items-center gap-2 bg-prpl text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-prpl/90 disabled:opacity-50 transition shadow-sm">
+                    className="btn-magnetic inline-flex items-center gap-2 bg-gradient-to-r from-prpl to-purple-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-[0_4px_14px_rgba(124,58,237,0.3)] disabled:opacity-50 transition-all">
                     <Sparkles className="w-4 h-4" />
                     {generating ? 'Generating...' : 'Generate with AI'}
                   </button>
@@ -252,7 +254,7 @@ export default function JobPosting() {
           {/* Right sidebar: Publish actions */}
           <div className="space-y-5">
             {/* Apply Link */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-5">
+            <div className="rounded-2xl surface-primary p-5">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Apply Link</h3>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200 text-slate-600 truncate">
@@ -265,7 +267,7 @@ export default function JobPosting() {
             </div>
 
             {/* LinkedIn Publish */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-5">
+            <div className="rounded-2xl surface-primary p-5">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">LinkedIn</h3>
               <div className="flex items-center gap-2 mb-3">
                 <FaLinkedinIn className="w-5 h-5 text-[#0077B5]" />
@@ -295,7 +297,7 @@ export default function JobPosting() {
             </div>
 
             {/* Share Options */}
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-5">
+            <div className="rounded-2xl surface-primary p-5">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Share</h3>
               <div className="space-y-2">
                 <button onClick={copyApplyLink} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition">

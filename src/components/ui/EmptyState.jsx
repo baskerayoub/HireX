@@ -1,18 +1,17 @@
-import { Inbox } from 'lucide-react';
-
-export default function EmptyState({ 
-  icon: EmptyIcon = Inbox, 
-  title = 'No data yet', 
-  description = 'Get started by creating your first item.',
-  action = null 
-}) {
+export default function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="w-16 h-16 rounded-2xl bg-prpl/8 text-prpl flex items-center justify-center mb-5">
-        <EmptyIcon className="w-8 h-8" />
-      </div>
-      <h3 className="text-lg font-semibold text-slate-800 mb-1">{title}</h3>
-      <p className="text-sm text-slate-500 text-center max-w-xs mb-5">{description}</p>
+    <div className="rounded-2xl surface-primary p-12 text-center animate-fade-in">
+      {Icon && (
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-prpl/10 to-accent/10 dark:from-prpl/15 dark:to-accent/15 text-prpl flex items-center justify-center mx-auto mb-5">
+          <Icon className="w-7 h-7" />
+        </div>
+      )}
+      {title && (
+        <p className="text-base font-semibold text-slate-700 dark:text-slate-200 mb-2">{title}</p>
+      )}
+      {description && (
+        <p className="text-sm text-slate-400 dark:text-slate-500 mb-6 max-w-sm mx-auto leading-relaxed">{description}</p>
+      )}
       {action}
     </div>
   );

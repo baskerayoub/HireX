@@ -10,6 +10,7 @@ router.get("/", projectController.list);
 router.get("/stats", projectController.getStats);
 router.get("/:id", projectController.getById);
 router.put("/:id", projectController.update);
+router.patch("/:id/toggle-status", projectController.toggleStatus);
 router.delete("/:id", projectController.archive);
 
 module.exports = router;

@@ -14,9 +14,16 @@ exports.apply = async (req, res) => {
     }
 
     // Verify profile exists
-    const prof = await profile.findByPk(profileId);
+    const prof = await profile.findByPk(profileId, {
+      include: [{ model: project, as: "Project", attributes: ["id", "status"] }],
+    });
     if (!prof) {
       return res.status(404).json({ error: "Job position not found" });
+    }
+
+    // Block applications for inactive projects
+    if (prof.Project && prof.Project.status === "Inactive") {
+      return res.status(403).json({ error: "This position is no longer accepting applications." });
     }
 
     // Check for duplicate application

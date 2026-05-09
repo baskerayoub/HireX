@@ -63,7 +63,7 @@ exports.list = async (req, res) => {
           model: profile, 
           as: "Profiles",
           include: [
-            { model: candidate, as: "Candidates", attributes: ["id", "status", "score_value"] }
+            { model: candidate, as: "Candidates", attributes: ["id", "name", "email", "status", "score_value", "current_position"] }
           ]
         },
       ],
@@ -74,6 +74,26 @@ exports.list = async (req, res) => {
   } catch (error) {
     console.error("List projects error:", error);
     return res.status(500).json({ error: "Failed to list projects" });
+  }
+};
+
+// Toggle project status between Active and Inactive
+exports.toggleStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const proj = await project.findByPk(id);
+
+    if (!proj) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    const newStatus = proj.status === "Active" ? "Inactive" : "Active";
+    await proj.update({ status: newStatus, updatedAt: new Date() });
+
+    return res.json({ message: `Project ${newStatus === "Active" ? "activated" : "deactivated"}`, project: proj });
+  } catch (error) {
+    console.error("Toggle project status error:", error);
+    return res.status(500).json({ error: "Failed to toggle project status" });
   }
 };
 

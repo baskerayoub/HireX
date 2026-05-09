@@ -1,332 +1,211 @@
-import { useState } from 'react'
-import { Eye, EyeOff, Mail, UserRound } from 'lucide-react'
-import { FaApple, FaFacebookF } from 'react-icons/fa'
-import { FcGoogle } from 'react-icons/fc'
-import { useNavigate, Navigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import Balatro from '../components/Background';
+import { useState, useEffect, useRef } from 'react';
+import { Eye, EyeOff, Mail, UserRound, ArrowRight, Sun, Moon, Lock } from 'lucide-react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 
-
-const emptyLoginForm = {
-  email: '',
-  password: '',
-}
-
-const emptySignupForm = {
-  name: '',
-  email: '',
-  password: '',
-}
-
-const brandName = 'HireX'
-
-const socialProviders = [
-  {
-    label: 'Facebook',
-    icon: FaFacebookF,
-    className: 'text-prpl',
-  },
-  {
-    label: 'Google',
-    icon: FcGoogle,
-    className: '',
-  },
-  {
-    label: 'Apple',
-    icon: FaApple,
-    className: 'text-slate-900',
-  },
-]
-
-function cn(...classes) {
-  return classes.filter(Boolean).join(' ')
-}
-
-function SocialButton({ label, Icon, className }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className="grid h-14 w-full place-items-center rounded-xl border border-slate-200 bg-white text-slate-900 transition hover:-translate-y-0.5 hover:border-prpl/40 hover:shadow-[0_14px_24px_rgba(85,35,233,0.10)]"
-    >
-      <Icon className={cn('h-7 w-7', className)} />
-    </button>
-  )
-}
-
-function AuthField({
-  id,
-  label,
-  type,
-  value,
-  onChange,
-  placeholder,
-  Icon,
-  autoFocus = false,
-  trailingAction = null,
-}) {
-  return (
-    <div className="group relative">
-      <label
-        htmlFor={id}
-        className="pointer-events-none absolute left-4 top-0 z-10 -translate-y-1/2 bg-white px-2 text-[0.95rem] font-medium text-slate-400 transition group-focus-within:text-prpl"
-      >
-        {label}
-      </label>
-
-      <div className="relative rounded-lg border border-slate-200 transition group-focus-within:border-prpl group-focus-within:shadow-[0_0_0_2px_rgba(85,35,233,0.10)]">
-        <input
-          id={id}
-          name={id}
-          type={type}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          autoFocus={autoFocus}
-          className="h-[62px] w-full rounded-lg bg-white px-5 pr-14 text-[1.02rem] text-slate-800 outline-none placeholder:text-slate-400"
-          required
-        />
-
-        {Icon ? (
-          <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-300">
-            <Icon className="h-5 w-5" />
-          </div>
-        ) : null}
-
-        {trailingAction ? (
-          <div className="absolute inset-y-0 right-3 flex items-center">{trailingAction}</div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
+function cn(...c) { return c.filter(Boolean).join(' '); }
 
 export default function Login() {
-  const navigate = useNavigate()
-  const [mode, setMode] = useState('signup')
-  const [showPassword, setShowPassword] = useState(false)
-  const [loginForm, setLoginForm] = useState(emptyLoginForm)
-  const [signupForm, setSignupForm] = useState(emptySignupForm)
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState({
-    type: '',
-    text: '',
-  })
+  const navigate = useNavigate();
+  const { user, login, signup } = useAuth();
+  const { isDark, toggle } = useTheme();
+  const toast = useToast();
 
-  const currentForm = mode === 'login' ? loginForm : signupForm
+  const [mode, setMode] = useState('login');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '' });
+  const [errors, setErrors] = useState({});
+  const [mounted, setMounted] = useState(false);
+  const emailRef = useRef(null);
 
-  const { login, signup, user } = useAuth()
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { setTimeout(() => emailRef.current?.focus(), 350); }, [mode]);
 
-  if (user) {
-    return <Navigate to="/dashboard" replace />
-  }
+  if (user) return <Navigate to="/workspace" replace />;
 
-  function switchMode(nextMode) {
-    setMode(nextMode)
-    setMessage({ type: '', text: '' })
-  }
+  const isSignup = mode === 'signup';
+  const form = isSignup ? signupForm : loginForm;
 
-  function handleChange(event) {
-    const { name, value } = event.target
+  const validate = () => {
+    const e = {};
+    if (isSignup && !signupForm.name.trim()) e.name = 'Name is required';
+    if (!form.email.trim()) e.email = 'Email is required';
+    else if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Invalid email';
+    if (!form.password.trim()) e.password = 'Password is required';
+    else if (form.password.length < 6) e.password = 'Min 6 characters';
+    setErrors(e);
+    return !Object.keys(e).length;
+  };
 
-    if (mode === 'login') {
-      setLoginForm((current) => ({
-        ...current,
-        [name]: value,
-      }))
-      return
-    }
-
-    setSignupForm((current) => ({
-      ...current,
-      [name]: value,
-    }))
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
-    setLoading(true)
-    setMessage({ type: '', text: '' })
-
+  const onSubmit = async (ev) => {
+    ev.preventDefault();
+    if (!validate()) return toast.warning('Fix highlighted fields.');
+    setLoading(true);
     try {
-      if (mode === 'login') {
-        const result = await login(loginForm.email, loginForm.password);
-
-        if (result.success) {
-          setMessage({
-            type: 'success',
-            text: 'Login successful.',
-          })
-          navigate('/dashboard', { replace: true })
-        } else {
-          setMessage({ type: 'error', text: result.error });
-        }
-        return
-      }
-
-      const result = await signup(signupForm);
-      if (result.success) {
-        setMessage({
-          type: 'success',
-          text: 'Account created successfully!',
-        })
-        navigate('/dashboard', { replace: true })
+      if (isSignup) {
+        const r = await signup({ name: signupForm.name.trim(), email: signupForm.email.trim(), password: signupForm.password });
+        if (!r.success) { toast.error(r.error || 'Signup failed.'); return; }
+        toast.success('Account created! Welcome.');
       } else {
-        setMessage({ type: 'error', text: result.error });
+        const r = await login(loginForm.email.trim(), loginForm.password);
+        if (!r.success) { toast.error(r.error || 'Invalid credentials.'); return; }
+        toast.success('Welcome back!');
       }
-    } catch {
-      setMessage({
-        type: 'error',
-        text: 'Something went wrong. Please try again.',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+      navigate('/workspace', { replace: true });
+    } catch { toast.error('Unexpected error.'); }
+    finally { setLoading(false); }
+  };
 
-  const isSignup = mode === 'signup'
-  const PasswordIcon = showPassword ? EyeOff : Eye
-  const eyeButton = (
-    <button
-      type="button"
-      onClick={() => setShowPassword((current) => !current)}
-      className="rounded-full p-1 text-slate-300 transition hover:text-prpl"
-      aria-label={showPassword ? 'Hide password' : 'Show password'}
-    >
-      <PasswordIcon className="h-5 w-5" />
-    </button>
-  )
+  const set = (k, v) => {
+    setErrors(p => ({ ...p, [k]: '' }));
+    if (isSignup) setSignupForm(p => ({ ...p, [k]: v }));
+    else setLoginForm(p => ({ ...p, [k]: v }));
+  };
+
+  const inputCls = (field) => cn(
+    'h-[52px] w-full rounded-2xl border bg-white dark:bg-white/[0.04] pl-12 pr-12 text-[15px] text-slate-900 dark:text-slate-100 outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-slate-500',
+    errors[field]
+      ? 'border-rose-400 focus:ring-2 focus:ring-rose-300/30'
+      : 'border-slate-200/70 dark:border-white/[0.08] focus:border-prpl focus:ring-[3px] focus:ring-prpl/15'
+  );
 
   return (
-    <main className="min-h-svh bg-[#f5f7fb] font-[Aptos,Segoe_UI,Trebuchet_MS,sans-serif] text-slate-900">
-      <section className="grid min-h-svh lg:grid-cols-2">
-        <div className="flex min-h-svh flex-col bg-white px-6 py-8 sm:px-10 lg:px-12 xl:px-14">
-          <div className="flex items-center">
-            <div className="font-splatink text-[2.8rem] leading-none text-prpl sm:text-[2.5rem]">
-              {brandName}
+    <main className="min-h-svh bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-[#08090E] dark:via-[#0C0D14] dark:to-[#0A0B12] transition-colors duration-500 relative overflow-hidden flex items-center justify-center px-4 py-8">
+      {/* Subtle ambient blurs */}
+      <div className="absolute top-[-30%] left-[-15%] w-[500px] h-[500px] bg-prpl/[0.07] dark:bg-prpl/[0.04] rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-[-30%] right-[-15%] w-[500px] h-[500px] bg-accent/[0.05] dark:bg-accent/[0.03] rounded-full blur-[140px] pointer-events-none" />
+
+      <div className={`relative z-10 w-full max-w-[440px] transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}>
+        {/* Logo + theme toggle */}
+        <div className="flex items-center justify-between mb-10">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-prpl via-purple-600 to-violet-700 flex items-center justify-center shadow-[0_8px_30px_-6px_rgba(124,58,237,0.45)]">
+              <span className="text-white font-bold text-xl">H</span>
+            </div>
+            <div>
+              <h1 className="font-splatink text-[1.6rem] text-prpl leading-none">HireX</h1>
+              <p className="text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.25em] mt-0.5">AI Recruitment</p>
             </div>
           </div>
+          <button
+            onClick={toggle}
+            className="w-10 h-10 rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/70 dark:bg-white/[0.03] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-prpl dark:hover:text-prpl transition-all hover:border-prpl/30 backdrop-blur-sm"
+            aria-label="Toggle theme"
+          >
+            {isDark ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+          </button>
+        </div>
 
-          <div className="flex flex-1 justify-center pt-10 pb-8 lg:pt-14 lg:pb-12">
-            <div className="flex w-full max-w-[388px] flex-col sm:min-h-[700px]">
-              <p className="text-[1.08rem] font-medium text-slate-600">
-                {isSignup ? 'Start your journey' : 'Welcome back'}
-              </p>
+        {/* Glass card */}
+        <div className="relative rounded-[28px] bg-white/80 dark:bg-[#12131A]/80 backdrop-blur-2xl border border-slate-200/60 dark:border-white/[0.06] shadow-[0_24px_64px_-16px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-16px_rgba(0,0,0,0.4)] p-8 sm:p-10">
+          {/* Top accent line */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-[2px] rounded-full bg-gradient-to-r from-transparent via-prpl/60 to-transparent" />
 
-              <h1 className="mt-3 text-[2.55rem] font-semibold leading-tight tracking-[-0.04em] text-slate-900">
-                {isSignup ? `Sign Up to ${brandName}` : `Sign In to ${brandName}`}
-              </h1>
-
-              <form className="mt-16 space-y-9" onSubmit={handleSubmit}>
-                {isSignup ? (
-                  <AuthField
-                    id="name"
-                    label="Full name"
-                    type="text"
-                    value={signupForm.name}
-                    onChange={handleChange}
-                    placeholder="John Doe"
-                    Icon={UserRound}
-                    autoFocus
-                  />
-                ) : null}
-
-                <AuthField
-                  id="email"
-                  label="E-mail"
-                  type="email"
-                  value={currentForm.email}
-                  onChange={handleChange}
-                  placeholder="example@email.com"
-                  Icon={Mail}
-                  autoFocus={!isSignup}
-                />
-
-                <AuthField
-                  id="password"
-                  label="Password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={currentForm.password}
-                  onChange={handleChange}
-                  placeholder={showPassword ? 'yourpassword' : 'Enter your password'}
-                  trailingAction={eyeButton}
-                />
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="h-[58px] w-full rounded-lg bg-prpl text-[1.2rem] font-semibold text-white shadow-[0_18px_30px_rgba(85,35,233,0.22)] transition hover:bg-prpl/95 disabled:cursor-wait disabled:opacity-75"
-                >
-                  {loading
-                    ? isSignup
-                      ? 'Creating account...'
-                      : 'Signing in...'
-                    : isSignup
-                      ? 'Sign Up'
-                      : 'Sign In'}
-                </button>
-              </form>
-
-                {message.text ? (
-              <div className="mt-7 min-h-[84px]">
-                  <div
-                    className={cn(
-                      'rounded-lg border px-4 py-3 text-[0.98rem] leading-7',
-                      message.type === 'success'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-red-200 bg-red-50 text-red-600',
-                    )}
-                  >
-                    {message.text}
-                  </div>
-              </div>
-                ) : null}
-
-              <div className="text-center text-[1.05rem] mt-8 text-slate-500">
-                <span>{isSignup ? 'Have an account? ' : "Don't have an account? "}</span>
-                <button
-                  type="button"
-                  onClick={() => switchMode(isSignup ? 'login' : 'signup')}
-                  className="font-semibold text-prpl transition hover:text-prpl/90"
-                >
-                  {isSignup ? 'Sign in' : 'Sign up'}
-                </button>
-              </div>
-
-              <div className="mt-10 sm:mt-auto sm:pt-10">
-                <div className="flex items-center gap-3 text-[1rem] text-slate-400">
-                  <div className="h-px flex-1 bg-slate-200" />
-                  <span>{isSignup ? 'or sign up with' : 'or sign in with'}</span>
-                  <div className="h-px flex-1 bg-slate-200" />
-                </div>
-
-                <div className="mt-8 grid grid-cols-3 gap-4">
-                  {socialProviders.map((provider) => (
-                    <SocialButton
-                      key={provider.label}
-                      label={provider.label}
-                      Icon={provider.icon}
-                      className={provider.className}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
+          {/* Heading */}
+          <div className="text-center mb-8">
+            <h2 className="text-[1.7rem] font-bold text-slate-900 dark:text-white tracking-tight">
+              {isSignup ? 'Create account' : 'Welcome back'}
+            </h2>
+            <p className="text-[15px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+              {isSignup ? 'Start your AI-powered recruitment journey.' : 'Sign in to your recruitment workspace.'}
+            </p>
           </div>
 
+          {/* Tab switcher */}
+          <div className="grid grid-cols-2 rounded-2xl bg-slate-100/80 dark:bg-white/[0.04] p-1.5 border border-slate-200/40 dark:border-white/[0.03] mb-8">
+            {['login', 'signup'].map(m => (
+              <button
+                key={m}
+                onClick={() => { setMode(m); setErrors({}); }}
+                className={cn(
+                  'rounded-xl py-3 text-sm font-semibold transition-all duration-250',
+                  mode === m
+                    ? 'bg-white dark:bg-white/[0.08] text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                )}
+              >
+                {m === 'login' ? 'Sign in' : 'Sign up'}
+              </button>
+            ))}
+          </div>
+
+          {/* Form */}
+          <form onSubmit={onSubmit} className="space-y-5">
+            {isSignup && (
+              <div className="animate-fade-in">
+                <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-2">Full Name</label>
+                <div className="relative">
+                  <UserRound className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400 dark:text-slate-500 pointer-events-none" />
+                  <input value={signupForm.name} onChange={e => set('name', e.target.value)} className={inputCls('name')} placeholder="John Doe" />
+                </div>
+                {errors.name && <p className="mt-2 text-xs text-rose-500 font-medium">{errors.name}</p>}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400 dark:text-slate-500 pointer-events-none" />
+                <input ref={emailRef} value={form.email} onChange={e => set('email', e.target.value)} className={inputCls('email')} placeholder="you@company.com" autoComplete="email" />
+              </div>
+              {errors.email && <p className="mt-2 text-xs text-rose-500 font-medium">{errors.email}</p>}
+            </div>
+
+            <div>
+              <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300 mb-2">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400 dark:text-slate-500 pointer-events-none" />
+                <input value={form.password} onChange={e => set('password', e.target.value)} type={showPw ? 'text' : 'password'} className={inputCls('password')} placeholder="••••••••" autoComplete={isSignup ? 'new-password' : 'current-password'} />
+                <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition" aria-label="Toggle password">
+                  {showPw ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+                </button>
+              </div>
+              {errors.password && <p className="mt-2 text-xs text-rose-500 font-medium">{errors.password}</p>}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="relative w-full h-[52px] rounded-2xl bg-gradient-to-r from-prpl via-purple-600 to-violet-700 text-white font-semibold text-[15px] shadow-[0_8px_30px_-6px_rgba(124,58,237,0.5)] hover:shadow-[0_12px_40px_-6px_rgba(124,58,237,0.6)] disabled:opacity-60 disabled:cursor-wait transition-all overflow-hidden group mt-2"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/[0.08] to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+              <span className="relative z-10 flex items-center justify-center gap-2.5">
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Please wait...
+                  </>
+                ) : (
+                  <>
+                    {isSignup ? 'Create account' : 'Sign in'}
+                    <ArrowRight className="w-[18px] h-[18px] group-hover:translate-x-0.5 transition-transform" />
+                  </>
+                )}
+              </span>
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="mt-8 flex items-center gap-4">
+            <div className="flex-1 h-px bg-slate-200/60 dark:bg-white/[0.04]" />
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em]">Secure</span>
+            <div className="flex-1 h-px bg-slate-200/60 dark:bg-white/[0.04]" />
+          </div>
+
+          <p className="mt-4 text-center text-[12px] text-slate-400 dark:text-slate-500 leading-relaxed">
+            By continuing, you agree to HireX's Terms of Service and Privacy Policy.
+          </p>
         </div>
 
-        <div className="relative hidden min-h-svh overflow-hidden border-l border-[#162325] lg:block">
-                <Balatro
-                isRotate={false}
-                mouseInteraction
-                pixelFilter={1500}
-                color1="#5523e9"
-                color2="#162325"
-                color3=""
-              />
-        </div>
-      </section>
+        {/* Branding footer */}
+        <p className="mt-8 text-center text-[11px] text-slate-400 dark:text-slate-600">
+          © {new Date().getFullYear()} HireX · AI-Powered Recruitment
+        </p>
+      </div>
     </main>
-  )
+  );
 }

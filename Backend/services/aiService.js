@@ -1,206 +1,180 @@
 const OpenAI = require("openai");
+const fs = require("fs");
+const path = require("path");
 require("dotenv").config();
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
-const FALLBACK_MODEL = process.env.OPENAI_FALLBACK_MODEL || "gpt-3.5-turbo";
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 class AiService {
-  async _call(prompt) {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is missing in Backend/.env");
-    }
-
-    const tryModels = [...new Set([MODEL, FALLBACK_MODEL].filter(Boolean))];
-    let lastError = null;
-
-    for (const model of tryModels) {
-      try {
-        const res = await client.responses.create({
-          model,
-          input: prompt,
-          text: {
-            format: { type: "text" },
-            verbosity: "medium",
-          },
-          reasoning: { effort: "medium", summary: "auto" },
-          store: false,
-        });
-
-        // Extract best text from responses API
-        let content = null;
-        if (res.output_text) content = res.output_text;
-        else if (Array.isArray(res.output) && res.output.length) {
-          // Try to find an item with type "output_text"
-          for (const out of res.output) {
-            if (out.type === "output_text" && out.text) {
-              content = out.text;
-              break;
-            }
-            if (out.content && Array.isArray(out.content)) {
-              // Some responses have content blocks
-              for (const c of out.content) {
-                if (c.type === "output_text" && c.text) {
-                  content = c.text;
-                  break;
-                }
-                if (c.type === "message" && c.text) {
-                  content = c.text;
-                  break;
-                }
-              }
-              if (content) break;
-            }
-          }
-        }
-
-        if (content) return content;
-        lastError = new Error(`OpenAI Responses returned empty content with model ${model}`);
-      } catch (error) {
-        lastError = error;
-        const msg = (error?.message || "").toLowerCase();
-        console.warn(`OpenAI model ${model} failed:`, error.message || error);
-
-        if (error?.status === 404 || msg.includes("does not exist") || msg.includes("not have access")) {
-          console.info(`Falling back from model ${model} to next available model.`);
-          continue;
-        }
-
-        break;
-      }
-    }
-
-    throw lastError;
+  /* ── Core call (token-optimized) ───────────── */
+  async _call(prompt, maxTokens = 800) {
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
+    const res = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: "system", content: "You are a concise recruitment AI. Return minimal, compact JSON. No extra whitespace." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.4,
+      max_tokens: maxTokens,
+    });
+    const content = res.choices?.[0]?.message?.content;
+    if (!content) throw new Error("OpenAI returned empty response");
+    return content;
   }
 
-  // Clean JSON from AI response (remove markdown fences if any)
   _parseJSON(text) {
-    const clean = String(text || "")
-      .replace(/```json\n?/g, "")
-      .replace(/```\n?/g, "")
-      .trim();
-
-    try {
-      return JSON.parse(clean);
-    } catch {
+    const clean = String(text || "").replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    try { return JSON.parse(clean); } catch {
       const match = clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (!match) throw new Error("OpenAI did not return JSON");
+      if (!match) throw new Error("No valid JSON in response");
       return JSON.parse(match[0]);
     }
   }
 
+  /* ══════════════════════════════════════════════
+     ██  AI-FIRST CV RANKING — FILE UPLOAD  ██
+     Sends the CV file directly to OpenAI.
+     No PDF parsing — the AI reads the file natively.
+     ══════════════════════════════════════════════ */
+  async rankCVWithFile(cvFilePath, jobProfile) {
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
+
+    const job = {
+      title: jobProfile.title || "",
+      skills: jobProfile.technicalSkills || "",
+      softSkills: jobProfile.softSkills || "",
+      experience: jobProfile.yearsOfExperience || "",
+      education: jobProfile.education || "",
+      location: jobProfile.location || "",
+      contract: jobProfile.typeContract || "",
+      description: (jobProfile.description || "").substring(0, 300),
+    };
+
+    const ext = path.extname(cvFilePath).toLowerCase();
+    const fileBuffer = fs.readFileSync(cvFilePath);
+    const base64 = fileBuffer.toString("base64");
+
+    // Build message content parts
+    const contentParts = [];
+
+    if (ext === ".pdf") {
+      // Send PDF directly to OpenAI — it reads PDFs natively
+      contentParts.push({
+        type: "file",
+        file: {
+          filename: path.basename(cvFilePath),
+          file_data: `data:application/pdf;base64,${base64}`,
+        },
+      });
+    } else if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) {
+      // Image CV (screenshot/scan)
+      const mimeType = ext === ".jpg" ? "image/jpeg" : `image/${ext.slice(1)}`;
+      contentParts.push({
+        type: "image_url",
+        image_url: { url: `data:${mimeType};base64,${base64}` },
+      });
+    } else {
+      // Plain text / docx fallback — read as text
+      const textContent = fileBuffer.toString("utf-8");
+      contentParts.push({
+        type: "text",
+        text: `CV CONTENT:\n${textContent.substring(0, 5000)}`,
+      });
+    }
+
+    // Add the analysis prompt
+    contentParts.push({
+      type: "text",
+      text: `Analyze this CV against the job. Return ONE JSON object.
+
+JOB: ${JSON.stringify(job)}
+
+Return ONLY this JSON (no markdown):
+{"score":0,"matchPercent":0,"name":"","email":"","phone":"","location":"","currentPosition":"","education":"","yearsOfExperience":0,"technicalSkills":[],"recommendation":"hire|consider|pass","strengths":["",""],"weaknesses":["",""],"technicalFit":"","experienceEval":"","communicationQuality":"","seniorityLevel":"junior|mid|senior|lead","summary":"2 sentence recruiter summary"}
+
+Rules:
+- score: 0-100 overall ranking
+- matchPercent: 0-100 job fit %
+- Extract candidate info from CV
+- Be fair: 80+ strong, 60-79 good, 40-59 possible, <40 weak
+- recommendation: hire (70+), consider (40-69), pass (<40)
+- strengths/weaknesses: 2-3 items each, specific
+- technicalFit: 1 sentence on tech skill match
+- experienceEval: 1 sentence on experience level
+- communicationQuality: 1 sentence on CV quality/clarity`,
+    });
+
+    try {
+      const res = await client.chat.completions.create({
+        model: MODEL,
+        messages: [
+          { role: "system", content: "You are a concise recruitment AI. Return minimal, compact JSON. No extra whitespace." },
+          { role: "user", content: contentParts },
+        ],
+        temperature: 0.4,
+        max_tokens: 800,
+      });
+      const content = res.choices?.[0]?.message?.content;
+      if (!content) throw new Error("OpenAI returned empty response");
+      return this._parseJSON(content);
+    } catch (e) {
+      throw new Error("CV ranking failed: " + e.message);
+    }
+  }
+
+  /* ── Generate Job Description ──────────────── */
   async generateJobDescription(title, skills, options = {}) {
     const { location, experienceYears, contractType } = options;
-    const skillList = Array.isArray(skills) ? skills.join(", ") : String(skills || "");
-    const prompt = [
-      "Create a short, professional job description.",
-      `Title: ${title}`,
-      `Skills: ${skillList}`,
-      location ? `Location: ${location}` : "",
-      experienceYears ? `Experience: ${experienceYears} years` : "",
-      contractType ? `Contract: ${contractType}` : "",
-      'Return ONLY compact JSON like this: {"title":"","summary":"","responsibilities":["","",""],"requirements":["","",""],"benefits":["",""],"fullDescription":""}',
-    ].filter(Boolean).join("\n");
-
-    try {
-      return this._parseJSON(await this._call(prompt));
-    } catch (error) {
-      console.error("AI generateJobDescription error:", error.message);
-      throw new Error("Failed to generate job description: " + error.message);
-    }
+    const prompt = `Job desc for: ${title}. Skills: ${Array.isArray(skills)?skills.join(","):skills||""}${location?". Loc:"+location:""}${experienceYears?". Exp:"+experienceYears+"y":""}${contractType?". Contract:"+contractType:""}\nReturn ONLY JSON: {"title":"","summary":"","responsibilities":["","",""],"requirements":["","",""],"benefits":["",""],"fullDescription":""}`;
+    try { return this._parseJSON(await this._call(prompt, 1000)); }
+    catch (e) { throw new Error("Job desc failed: " + e.message); }
   }
 
-  async parseCv(cvText, aiProvider = "openai") {
-    const prompt = [
-      "Extract as much useful candidate information as possible from this CV.",
-      "Infer carefully when the CV is clear, but use empty strings or empty arrays when information is not present.",
-      "For location, capture city/country if available. For yearsOfExperience, estimate from work history if not explicitly written.",
-      "Separate technical skills from soft skills. Include tools, frameworks, languages, databases, cloud, methods, and domain knowledge.",
-      "Return ONLY compact JSON with this shape:",
-      '{"name":"","email":"","phone":"","location":"","currentPosition":"","education":"","yearsOfExperience":0,"technicalSkills":[],"softSkills":[],"languages":[],"certifications":[],"hobbies":[],"experiences":[{"title":"","company":"","duration":"","location":"","description":"","technologies":[]}],"summary":"2 useful sentences"}',
-      `CV TEXT:\n${String(cvText || "").substring(0, 9000)}`,
-    ].join("\n");
-
-    try {
-      return this._parseJSON(await this._call(prompt));
-    } catch (error) {
-      console.error("AI parseCv error:", error.message);
-      throw new Error("Failed to parse CV: " + error.message);
-    }
+  /* ── AI Analytics Recommendations ──────────── */
+  async generateRecommendations(data) {
+    const prompt = `Give 3 short recruitment tips based on: ${data.totalCandidates||0} candidates, ${data.totalPositions||0} positions, ${data.activeProjects||0} active projects, ${data.screened||0} screened, ${data.interviewed||0} interviewed, ${data.hired||0} hired.\nReturn ONLY JSON array: [{"title":"","description":"","priority":"high|medium|low","category":"screening|interviews|sourcing|pipeline"}]`;
+    try { return this._parseJSON(await this._call(prompt, 500)); }
+    catch (e) { throw new Error("Recommendations failed: " + e.message); }
   }
 
-  async calculateMatchScore(candidateData, jobProfile, aiProvider = "openai") {
-    const prompt = [
-      "Evaluate this candidate for the job. Be fair and precise.",
-      "Scoring rules:",
-      "- Score 0-100. Do not make the score extremely low for one missing item if the candidate has related experience.",
-      "- Technical skills are important, but experience, education, role similarity, location/contract fit, and transferable skills also count.",
-      "- If a candidate misses an important skill, explain it and reduce the score proportionally. A decent partial match can still be 40-60.",
-      "- Use 80+ only for strong matches, 60-79 for good partial matches, 40-59 for possible but risky matches, under 40 for weak matches.",
-      "Return ONLY compact JSON with this shape:",
-      '{"overallScore":0,"skillMatchScore":0,"experienceScore":0,"educationScore":0,"roleFitScore":0,"locationFitScore":0,"matchedSkills":[],"partialMatchedSkills":[],"missingSkills":[],"missingCriticalSkills":[],"strengths":[],"weaknesses":[],"lowScoreReasons":[],"recommendation":"","summary":""}',
-      `JOB PROFILE:\n${JSON.stringify({
-        title: jobProfile.title || "",
-        description: jobProfile.description || "",
-        technicalSkills: jobProfile.technicalSkills || "",
-        softSkills: jobProfile.softSkills || "",
-        languages: jobProfile.languages || "",
-        mainMissions: jobProfile.mainMissions || "",
-        education: jobProfile.education || "",
-        yearsOfExperience: jobProfile.yearsOfExperience || null,
-        location: jobProfile.location || "",
-        typeContract: jobProfile.typeContract || "",
-      })}`,
-      `CANDIDATE:\n${JSON.stringify(candidateData)}`,
-    ].join("\n");
-
-    try {
-      return this._parseJSON(await this._call(prompt));
-    } catch (error) {
-      console.error("AI matchScore error:", error.message);
-      throw new Error("Failed to calculate match score: " + error.message);
-    }
+  /* ── Generate LinkedIn Post ─────────────────── */
+  async generatePost(profileData) {
+    const prompt = `Write a short LinkedIn job post (<800 chars) for: ${profileData.title}${profileData.technicalSkills?". Skills:"+profileData.technicalSkills:""}${profileData.location?". Loc:"+profileData.location:""}${profileData.typeContract?". Type:"+profileData.typeContract:""}\nReturn ONLY the post text, no JSON.`;
+    try { return await this._call(prompt, 400); }
+    catch (e) { throw new Error("Post generation failed: " + e.message); }
   }
+  /* ── AI Chat Assistant (HireX-scoped) ────────── */
+  async chat(messages, maxTokens = 400) {
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
 
-  async rankCandidates(candidates, jobProfile, aiProvider = "openai") {
-    const list = candidates.map((c, i) => ({
-      i, n: c.name || `C${i + 1}`,
-      s: c.technical_skills || c.technicalSkills || "",
-      soft: c.soft_skills || c.softSkills || "",
-      e: c.years_of_experience || c.yearsOfExperience || 0,
-      edu: c.education || "",
-      pos: c.current_position || c.currentPosition || "",
-      loc: c.location || "",
-      sum: c.summary || "",
-    }));
+    const systemPrompt = `You are the HireX AI assistant — strictly limited to recruitment, HR, and HireX platform features.
 
-    const prompt = [
-      "Rank these candidates for the job. Be fair and precise.",
-      "Use the same 0-100 scoring logic: 80+ strong, 60-79 good partial, 40-59 possible but risky, under 40 weak.",
-      "Do not give a very low score only because one skill is missing if the candidate has related skills or relevant experience.",
-      "Explain clearly why each score is high or low.",
-      `JOB:\n${JSON.stringify({
-        title: jobProfile.title || "",
-        description: jobProfile.description || "",
-        technicalSkills: jobProfile.technicalSkills || "",
-        softSkills: jobProfile.softSkills || "",
-        languages: jobProfile.languages || "",
-        mainMissions: jobProfile.mainMissions || "",
-        education: jobProfile.education || "",
-        yearsOfExperience: jobProfile.yearsOfExperience || null,
-        location: jobProfile.location || "",
-        typeContract: jobProfile.typeContract || "",
-      })}`,
-      `CANDIDATES:\n${JSON.stringify(list)}`,
-      'Return ONLY compact JSON array: [{"index":0,"name":"","score":0,"rank":1,"matchSummary":"","lowScoreReasons":[],"matchedSkills":[],"missingSkills":[]}]',
-    ].join("\n");
+SCOPE: recruitment, candidates, CV analysis, hiring, interviews, HR analytics, job positions, dashboard help, application features.
 
-    try {
-      return this._parseJSON(await this._call(prompt));
-    } catch (error) {
-      console.error("AI rankCandidates error:", error.message);
-      throw new Error("Failed to rank candidates: " + error.message);
-    }
+RULES:
+- NEVER answer topics outside scope (politics, religion, coding unrelated to HireX, hacking, games, math, science, general knowledge).
+- If off-topic, reply ONLY: "I'm specialized only in HireX recruitment features and HR-related assistance."
+- Keep answers short, professional, helpful.
+- Use markdown bold for key terms.
+- Max 3-4 sentences unless detail is requested.`;
+
+    const apiMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages.slice(-6), // Keep last 6 messages for context, saves tokens
+    ];
+
+    const res = await client.chat.completions.create({
+      model: MODEL,
+      messages: apiMessages,
+      temperature: 0.5,
+      max_tokens: maxTokens,
+    });
+
+    const content = res.choices?.[0]?.message?.content;
+    if (!content) throw new Error("OpenAI returned empty response");
+    return content;
   }
 }
 

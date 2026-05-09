@@ -44,6 +44,16 @@ module.exports = (sequelize, DataTypes) => {
     scope: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    linkedin_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Display name from LinkedIn profile'
+    },
+    linkedin_picture: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Profile picture URL from LinkedIn'
     }
   }, {
     sequelize,

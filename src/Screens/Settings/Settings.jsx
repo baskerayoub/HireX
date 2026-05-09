@@ -1,250 +1,323 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { linkedinApi } from '../../api';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { Settings as SettingsIcon, Shield, Bell, CheckCircle, XCircle, Unlink } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Bell, CheckCircle2, Link2Off, Moon, Palette, Settings as SettingsIcon, Shield, Sun, Monitor, Sparkles } from 'lucide-react';
 import { FaLinkedinIn } from 'react-icons/fa';
+import { linkedinApi } from '../../api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../../contexts/ToastContext';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { Link } from 'react-router-dom';
+
+function Toggle({ enabled, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative h-6 w-11 rounded-full transition-all duration-200 ${enabled ? 'bg-prpl shadow-[0_2px_8px_rgba(124,58,237,0.3)]' : 'bg-slate-300 dark:bg-slate-700'}`}
+    >
+      <span
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200 ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`}
+      />
+    </button>
+  );
+}
 
 export default function Settings() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('general');
-  const [linkedinStatus, setLinkedinStatus] = useState(null);
+  const { isDark, theme, setTheme } = useTheme();
+  const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [activeTab, setActiveTab] = useState('appearance');
   const [liLoading, setLiLoading] = useState(true);
+  const [linkedinStatus, setLinkedinStatus] = useState({ connected: false });
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [notifications, setNotifications] = useState({ apply: true, interview: true, aiDone: true, weekly: false });
 
+  // Handle LinkedIn OAuth callback redirect
   useEffect(() => {
-    async function checkLinkedIn() {
-      try {
-        const res = await linkedinApi.status();
-        setLinkedinStatus(res.data);
-      } catch {
-        setLinkedinStatus({ connected: false });
-      } finally { setLiLoading(false); }
-    }
-    checkLinkedIn();
-
-    // Handle LinkedIn OAuth callback
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-    if (code && state) {
-      handleLinkedInCallback(code, state);
+    const liResult = searchParams.get('linkedin');
+    if (liResult) {
+      setActiveTab('linkedin'); // Switch to LinkedIn tab
+      if (liResult === 'success') {
+        toast.success('LinkedIn connected successfully! 🎉');
+      } else if (liResult === 'error') {
+        const reason = searchParams.get('reason') || 'unknown';
+        toast.error(`LinkedIn connection failed: ${reason}`);
+      }
+      // Clean URL params
+      searchParams.delete('linkedin');
+      searchParams.delete('reason');
+      setSearchParams(searchParams, { replace: true });
     }
   }, []);
 
-  const handleLinkedInCallback = async (code, state) => {
-    try {
-      await linkedinApi.callback(code, state);
-      const res = await linkedinApi.status();
-      setLinkedinStatus(res.data);
-      // Clean URL
-      window.history.replaceState({}, '', '/settings');
-    } catch (err) {
-      console.error('LinkedIn callback error:', err);
+  useEffect(() => {
+    async function run() {
+      try {
+        const res = await linkedinApi.status();
+        setLinkedinStatus(res.data || { connected: false });
+      } catch {
+        setLinkedinStatus({ connected: false });
+      } finally {
+        setLiLoading(false);
+      }
     }
-  };
+    run();
+  }, []);
 
-  const handleConnectLinkedIn = async () => {
+  const tabs = [
+    { id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'general', label: 'General', icon: SettingsIcon },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'linkedin', label: 'LinkedIn', icon: FaLinkedinIn },
+    { id: 'security', label: 'Security', icon: Shield },
+  ];
+
+  const connectLinkedIn = async () => {
     setConnecting(true);
     try {
       const res = await linkedinApi.getAuthUrl();
+      if (!res?.data?.url) {
+        toast.error('Unable to start LinkedIn connection.');
+        return;
+      }
       window.location.href = res.data.url;
     } catch {
-      alert('Failed to start LinkedIn connection');
+      toast.error('Failed to connect LinkedIn.');
       setConnecting(false);
     }
   };
 
-  const handleDisconnectLinkedIn = async () => {
-    if (!confirm('Disconnect LinkedIn? You will need to reconnect to publish jobs.')) return;
+  const disconnectLinkedIn = async () => {
     setDisconnecting(true);
     try {
       await linkedinApi.disconnect();
       setLinkedinStatus({ connected: false });
-    } catch (err) { console.error(err); }
-    finally { setDisconnecting(false); }
+      toast.success('LinkedIn disconnected successfully.');
+    } catch {
+      toast.error('Could not disconnect LinkedIn right now.');
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
-  const tabs = [
-    { id: 'general', label: 'General', icon: SettingsIcon },
-    { id: 'linkedin', label: 'LinkedIn', icon: FaLinkedinIn },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-  ];
-
   return (
-    <>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage your account and integrations</p>
-      </div>
+    <div className="space-y-8">
+      {/* Header */}
+      <section className="animate-fade-in">
+        <h1 className="text-[1.85rem] font-bold tracking-tight text-slate-900 dark:text-slate-100">Settings</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Fine-tune your workspace experience and integrations.</p>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar tabs */}
-        <div className="space-y-1">
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${
-                activeTab === tab.id ? 'bg-prpl/8 text-prpl font-semibold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}>
-              <tab.icon className="w-4 h-4" />
+      <section className="grid gap-6 lg:grid-cols-[240px_1fr]">
+        {/* Tab nav */}
+        <aside className="rounded-2xl surface-primary p-3 animate-fade-in" style={{ animationDelay: '100ms' }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? 'bg-prpl/8 dark:bg-prpl/12 text-prpl font-semibold'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/[0.03] hover:text-slate-800 dark:hover:text-slate-100'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
               {tab.label}
             </button>
           ))}
-        </div>
+        </aside>
 
         {/* Content */}
-        <div className="lg:col-span-3">
+        <div className="space-y-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          {activeTab === 'appearance' && (
+            <article className="rounded-2xl surface-primary p-6">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">Appearance</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Balanced premium themes with soft contrast for extended sessions.</p>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                {/* Light theme */}
+                <button
+                  type="button"
+                  onClick={() => setTheme('light')}
+                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all ${
+                    !isDark
+                      ? 'border-prpl/40 bg-prpl/5 dark:bg-prpl/8 shadow-[0_0_0_1px_rgba(124,58,237,0.15)]'
+                      : 'border-slate-200/60 dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/10'
+                  }`}
+                >
+                  {!isDark && <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-prpl text-white flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5" /></div>}
+                  <div className="mb-4 flex items-center gap-3">
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 dark:bg-amber-500/15 text-amber-500 shadow-sm">
+                      <Sun className="h-5 w-5" />
+                    </span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">Light</p>
+                  </div>
+                  <div className="h-16 rounded-xl border border-slate-200/60 bg-gradient-to-b from-white to-slate-50 overflow-hidden">
+                    <div className="h-3 bg-slate-100 border-b border-slate-200/50" />
+                    <div className="flex gap-1.5 p-2">
+                      <div className="w-6 h-6 rounded-md bg-slate-200/60" />
+                      <div className="flex-1 space-y-1">
+                        <div className="h-1.5 w-3/4 bg-slate-200/60 rounded" />
+                        <div className="h-1.5 w-1/2 bg-slate-200/40 rounded" />
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Dark theme */}
+                <button
+                  type="button"
+                  onClick={() => setTheme('dark')}
+                  className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all ${
+                    isDark
+                      ? 'border-prpl/40 bg-prpl/8 shadow-[0_0_0_1px_rgba(124,58,237,0.15)]'
+                      : 'border-slate-200/60 dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/10'
+                  }`}
+                >
+                  {isDark && <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-prpl text-white flex items-center justify-center"><CheckCircle2 className="w-3.5 h-3.5" /></div>}
+                  <div className="mb-4 flex items-center gap-3">
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-800 dark:bg-slate-700 text-violet-300 shadow-sm">
+                      <Moon className="h-5 w-5" />
+                    </span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">Dark</p>
+                  </div>
+                  <div className="h-16 rounded-xl border border-slate-700/50 bg-gradient-to-b from-[#111318] to-[#0A0B10] overflow-hidden">
+                    <div className="h-3 bg-[#161922] border-b border-white/[0.04]" />
+                    <div className="flex gap-1.5 p-2">
+                      <div className="w-6 h-6 rounded-md bg-white/[0.06]" />
+                      <div className="flex-1 space-y-1">
+                        <div className="h-1.5 w-3/4 bg-white/[0.06] rounded" />
+                        <div className="h-1.5 w-1/2 bg-white/[0.04] rounded" />
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <p className="mt-5 text-xs text-slate-500 dark:text-slate-400">
+                Active: <span className="font-semibold text-prpl capitalize">{theme}</span>
+              </p>
+            </article>
+          )}
+
           {activeTab === 'general' && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-5">General Settings</h2>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">First Name</label>
-                    <input type="text" defaultValue={user?.firstName || ''} readOnly
-                      className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-600" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
-                    <input type="text" defaultValue={user?.lastName || ''} readOnly
-                      className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-600" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                  <input type="email" defaultValue={user?.email || ''} readOnly
-                    className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-600" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                  <input type="text" defaultValue={user?.role || 'User'} readOnly
-                    className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-600" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'linkedin' && (
-            <div className="space-y-5">
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="p-2.5 rounded-xl bg-[#0077B5]/10">
-                    <FaLinkedinIn className="w-6 h-6 text-[#0077B5]" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">LinkedIn Integration</h2>
-                    <p className="text-sm text-slate-500">Connect your LinkedIn account to publish job posts directly</p>
-                  </div>
-                </div>
-
-                {liLoading ? (
-                  <LoadingSpinner size="sm" />
-                ) : linkedinStatus?.connected ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                      <CheckCircle className="w-5 h-5 text-emerald-600" />
-                      <div>
-                        <p className="text-sm font-semibold text-emerald-800">LinkedIn Connected</p>
-                        <p className="text-xs text-emerald-600">
-                          Token expires: {new Date(linkedinStatus.expiresAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <button onClick={handleDisconnectLinkedIn} disabled={disconnecting}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-100 transition disabled:opacity-50">
-                      <Unlink className="w-4 h-4" />
-                      {disconnecting ? 'Disconnecting...' : 'Disconnect LinkedIn'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <XCircle className="w-5 h-5 text-slate-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700">Not Connected</p>
-                        <p className="text-xs text-slate-500">Connect to publish jobs to your LinkedIn feed</p>
-                      </div>
-                    </div>
-                    <button onClick={handleConnectLinkedIn} disabled={connecting}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-[#0077B5] text-white rounded-xl text-sm font-semibold hover:bg-[#006396] transition disabled:opacity-50">
-                      <FaLinkedinIn className="w-4 h-4" />
-                      {connecting ? 'Redirecting...' : 'Connect LinkedIn'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">How it works</h3>
-                <div className="space-y-3">
-                  {[
-                    { step: '1', text: 'Connect your LinkedIn account via OAuth 2.0' },
-                    { step: '2', text: 'Generate an AI-powered job description for your position' },
-                    { step: '3', text: 'Publish directly to your LinkedIn feed with one click' },
-                    { step: '4', text: 'Candidates apply via the shared link and land in your pipeline' },
-                  ].map(item => (
-                    <div key={item.step} className="flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-full bg-prpl/10 text-prpl text-xs font-bold flex items-center justify-center shrink-0">
-                        {item.step}
-                      </div>
-                      <p className="text-sm text-slate-600">{item.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-5">Notification Preferences</h2>
-              <div className="space-y-4">
+            <article className="rounded-2xl surface-primary p-6">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">General</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Your account information.</p>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {[
-                  { label: 'New candidate applications', desc: 'Get notified when someone applies', enabled: true },
-                  { label: 'Interview reminders', desc: 'Reminder 1 hour before interviews', enabled: true },
-                  { label: 'AI analysis complete', desc: 'When CV parsing or scoring finishes', enabled: false },
-                  { label: 'Weekly pipeline report', desc: 'Summary of hiring activity', enabled: false },
-                ].map((pref, i) => (
-                  <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{pref.label}</p>
-                      <p className="text-xs text-slate-500">{pref.desc}</p>
-                    </div>
-                    <button className={`w-11 h-6 rounded-full transition-colors ${pref.enabled ? 'bg-prpl' : 'bg-slate-200'}`}>
-                      <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${pref.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                    </button>
+                  { label: 'First Name', value: user?.firstName || user?.name?.split(' ')[0] || 'N/A' },
+                  { label: 'Last Name', value: user?.lastName || 'N/A' },
+                  { label: 'Email', value: user?.email || 'N/A', span: 2 },
+                  { label: 'Role', value: user?.role || 'Member' },
+                ].map(field => (
+                  <div key={field.label} className={field.span === 2 ? 'sm:col-span-2' : ''}>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-medium mb-1.5">{field.label}</p>
+                    <p className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-slate-50/80 dark:bg-white/[0.02] px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200">
+                      {field.value}
+                    </p>
                   </div>
                 ))}
               </div>
-            </div>
+            </article>
+          )}
+
+          {activeTab === 'notifications' && (
+            <article className="rounded-2xl surface-primary p-6">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">Notifications</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Control what updates you receive.</p>
+              <div className="mt-6 space-y-3">
+                {[
+                  ['apply', 'New candidate applications', 'Get notified when a candidate applies to your positions'],
+                  ['interview', 'Interview reminders', 'Reminders before scheduled interviews'],
+                  ['aiDone', 'AI scoring complete', 'When AI finishes analyzing and scoring candidates'],
+                  ['weekly', 'Weekly summary report', 'A digest of your hiring activity each week'],
+                ].map(([key, label, desc]) => (
+                  <div key={key} className="flex items-center justify-between rounded-xl p-3.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-all">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{desc}</p>
+                    </div>
+                    <Toggle
+                      enabled={notifications[key]}
+                      onClick={() => setNotifications((prev) => ({ ...prev, [key]: !prev[key] }))}
+                    />
+                  </div>
+                ))}
+              </div>
+            </article>
+          )}
+
+          {activeTab === 'linkedin' && (
+            <article className="rounded-2xl surface-primary p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#0077B5]/10 dark:bg-[#0077B5]/20 text-[#0077B5]">
+                  <FaLinkedinIn className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">LinkedIn Integration</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Connect and publish hiring posts directly.</p>
+                </div>
+              </div>
+
+              {liLoading ? (
+                <LoadingSpinner size="sm" text="Checking LinkedIn status..." />
+              ) : linkedinStatus.connected ? (
+                <div className="rounded-xl border border-emerald-200/60 dark:border-emerald-500/20 bg-emerald-50/80 dark:bg-emerald-500/8 p-5">
+                  <div className="flex items-start gap-2.5">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">LinkedIn connected</p>
+                      <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">Your account is ready to publish jobs.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={disconnecting}
+                    onClick={disconnectLinkedIn}
+                    className="mt-4 btn-magnetic inline-flex h-10 items-center gap-2 rounded-xl border border-rose-200/60 dark:border-rose-500/20 bg-rose-50/80 dark:bg-rose-500/8 px-4 text-sm font-medium text-rose-700 dark:text-rose-300 transition-all hover:bg-rose-100 dark:hover:bg-rose-500/15 disabled:opacity-60"
+                  >
+                    <Link2Off className="h-4 w-4" />
+                    {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-slate-50/80 dark:bg-white/[0.02] p-5">
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mb-4">LinkedIn is not connected yet. Connect to publish job postings directly.</p>
+                  <button
+                    type="button"
+                    onClick={connectLinkedIn}
+                    disabled={connecting}
+                    className="btn-magnetic inline-flex h-10 items-center gap-2 rounded-xl bg-[#0077B5] px-5 text-sm font-semibold text-white transition-all hover:bg-[#00659c] shadow-[0_4px_12px_rgba(0,119,181,0.3)] disabled:opacity-70"
+                  >
+                    <FaLinkedinIn className="h-4 w-4" />
+                    {connecting ? 'Redirecting...' : 'Connect LinkedIn'}
+                  </button>
+                </div>
+              )}
+            </article>
           )}
 
           {activeTab === 'security' && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-5">Security</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label>
-                  <input type="password" className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm outline-none focus:border-prpl" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
-                  <input type="password" className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm outline-none focus:border-prpl" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Confirm New Password</label>
-                  <input type="password" className="w-full h-10 px-4 rounded-lg border border-slate-200 text-sm outline-none focus:border-prpl" />
-                </div>
-                <button className="px-5 py-2 bg-prpl text-white text-sm font-semibold rounded-lg hover:bg-prpl/90 transition">
-                  Update Password
-                </button>
-              </div>
-            </div>
+            <article className="rounded-2xl surface-primary p-6">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">Security</h2>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Manage your password and account security.</p>
+              <Link
+                to="/change-password"
+                className="btn-magnetic mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-prpl to-purple-600 px-5 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(124,58,237,0.3)] transition-all"
+              >
+                <Shield className="w-4 h-4" />
+                Change Password
+              </Link>
+            </article>
           )}
         </div>
-      </div>
-    </>
+      </section>
+    </div>
   );
 }

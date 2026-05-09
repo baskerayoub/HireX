@@ -182,6 +182,12 @@ if (db.users && db.linkedin_token) {
   db.linkedin_token.belongsTo(db.users, { as: "User", foreignKey: "fk_user" });
 }
 
+// User <-> AI Recommendation Cache (1-N)
+if (db.users && db.ai_recommendation_cache) {
+  db.users.hasMany(db.ai_recommendation_cache, { as: "RecommendationCaches", foreignKey: "fk_user" });
+  db.ai_recommendation_cache.belongsTo(db.users, { as: "User", foreignKey: "fk_user" });
+}
+
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 

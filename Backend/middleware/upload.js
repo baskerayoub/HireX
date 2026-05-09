@@ -15,21 +15,29 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
-    cb(null, `cv-${uniqueSuffix}${ext}`);
+    // Prefix based on field name (avatar vs cv)
+    const prefix = file.fieldname === "avatar" ? "avatar" : "cv";
+    cb(null, `${prefix}-${uniqueSuffix}${ext}`);
   },
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
+  const docTypes = [
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
+  const imageTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  if (docTypes.includes(file.mimetype) || imageTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Only PDF and Word documents are allowed."), false);
+    cb(new Error("Only PDF, Word documents, and images (JPEG, PNG, GIF, WebP) are allowed."), false);
   }
 };
 

@@ -5,9 +5,22 @@ const { authenticate } = require("../middleware/auth");
 
 router.use(authenticate);
 
+// AI-First CV Ranking — uploads file directly to OpenAI (no parsing)
+router.post("/rank-cv/:candidateId", aiController.rankCV);
+
+// Rank ALL unranked candidates in a project
+router.post("/rank-all/:projectId", aiController.rankAll);
+
+// Job description generation
 router.post("/generate-description", aiController.generateDescription);
-router.post("/parse-cv/:candidateId", aiController.parseCv);
-router.post("/match-score/:candidateId/:profileId", aiController.matchScore);
-router.post("/rank/:profileId", aiController.rankCandidates);
+
+// Analytics recommendations
+router.post("/recommendations", aiController.recommendations);
+
+// LinkedIn post generation
+router.post("/generate-post", aiController.generatePost);
+
+// AI Chat assistant (HireX-scoped)
+router.post("/chat", aiController.chat);
 
 module.exports = router;

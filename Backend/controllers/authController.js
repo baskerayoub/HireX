@@ -45,6 +45,8 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         must_change_password: user.must_change_password,
+        avatar: user.avatar,
+        country: user.country,
       },
     });
   } catch (error) {
@@ -99,10 +101,52 @@ exports.signup = async (req, res) => {
         lastName: newUser.lastName,
         email: newUser.email,
         role: newUser.role,
+        avatar: newUser.avatar,
+        country: newUser.country,
       },
     });
   } catch (error) {
     console.error("Signup error:", error);
     return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { firstName, lastName, email, country } = req.body;
+
+    const user = await users.findByPk(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const updates = {};
+    if (firstName !== undefined) updates.firstName = firstName.trim();
+    if (lastName !== undefined) updates.lastName = lastName.trim();
+    if (email !== undefined) updates.email = email.trim().toLowerCase();
+    if (country !== undefined) updates.country = country;
+
+    // Handle avatar file upload
+    if (req.file) {
+      updates.avatar = req.file.filename;
+    }
+
+    await user.update(updates);
+
+    return res.json({
+      message: "Profile updated",
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+        country: user.country,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    return res.status(500).json({ error: "Failed to update profile" });
   }
 };

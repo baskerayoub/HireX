@@ -42,6 +42,14 @@ module.exports = function (sequelize, DataTypes) {
         allowNull: true,
         defaultValue: false,
       },
+      avatar: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      country: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
     },
     {
       sequelize,

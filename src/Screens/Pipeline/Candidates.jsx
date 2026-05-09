@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { candidatesApi, profilesApi, aiApi } from '../../api';
+import { candidatesApi, profilesApi, aiApi, meetingsApi } from '../../api';
 import Modal from '../../components/ui/Modal';
+import EmailPreview from '../../components/ui/EmailPreview';
 import EmptyState from '../../components/ui/EmptyState';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { Users, Search, Plus, Brain, ArrowUpDown, Eye, Sparkles, Download, FileText, Mail, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Info, AlertCircle, ThumbsUp } from 'lucide-react';
+import ProgressRing from '../../components/ui/ProgressRing';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../components/ui/ConfirmDialog';
+import { Users, Search, Plus, Brain, Eye, Sparkles, Download, FileText, Mail, Phone, MapPin, Briefcase, CheckCircle2, XCircle, ThumbsUp, ThumbsDown, CalendarDays, Loader2, Shield, TrendingUp, Zap, ListChecks, Trash2 } from 'lucide-react';
 
 export default function Candidates() {
   const { projectId } = useParams();
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [candidates, setCandidates] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +26,20 @@ export default function Candidates() {
   const [aiLoading, setAiLoading] = useState({});
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [rankingResult, setRankingResult] = useState(null);
+  const [rankingLoading, setRankingLoading] = useState(false);
+  const [rankAllLoading, setRankAllLoading] = useState(false);
+  const [rankingInline, setRankingInline] = useState({});
+  const [scoreFilter, setScoreFilter] = useState('all');
+
+  // Schedule Interview state
+  const [scheduleTarget, setScheduleTarget] = useState(null);
+  const [scheduleStep, setScheduleStep] = useState('form'); // form | preview
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    type: 'Interview', subject: '', start_date: '', end_date: '',
+    platform: 'Google Meet', link: '', content: '',
+  });
 
   const load = async () => {
     try {
@@ -48,41 +68,76 @@ export default function Candidates() {
     finally { setCreating(false); }
   };
 
-  const handleParseCV = async (candidateId) => {
-    setAiLoading(prev => ({ ...prev, [candidateId]: true }));
+  const handleRankCV = async (candidateId) => {
+    setRankingLoading(true);
     try {
-      await aiApi.parseCv(candidateId);
-      load();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to parse CV'); }
-    finally { setAiLoading(prev => ({ ...prev, [candidateId]: false })); }
+      const res = await aiApi.rankCV(candidateId);
+      setRankingResult(res.data);
+      load(); // refresh table scores
+    } catch (err) { toast.error(err.response?.data?.error || 'Failed to rank CV'); }
+    finally { setRankingLoading(false); }
   };
 
-  const handleMatchScore = async (candidateId, profileId) => {
-    setAiLoading(prev => ({ ...prev, [`match-${candidateId}`]: true }));
+  const handleRankAll = async () => {
+    if (rankAllLoading) return;
+    const unranked = candidates.filter(c => !c.is_ranked && c.cv_s3_path && c.cv_s3_path !== 'no-cv');
+    if (unranked.length === 0) {
+      toast.info('All candidates with CVs are already ranked!');
+      return;
+    }
+    const ok = await confirm({ title: 'Rank All Candidates', message: `This will rank ${unranked.length} unranked candidate(s) using AI. Continue?`, confirmText: 'Rank All', variant: 'warning' });
+    if (!ok) return;
+    setRankAllLoading(true);
     try {
-      await aiApi.matchScore(candidateId, profileId);
-      load();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to calculate score'); }
-    finally { setAiLoading(prev => ({ ...prev, [`match-${candidateId}`]: false })); }
+      const res = await aiApi.rankAll(projectId);
+      const { totalRanked, totalSkipped, totalFailed } = res.data;
+      load(); // refresh table
+      toast.success(`Rank complete — ${totalRanked} ranked, ${totalSkipped || 0} skipped, ${totalFailed || 0} failed`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to rank candidates');
+    } finally {
+      setRankAllLoading(false);
+    }
   };
 
-  const handleRank = async (profileId) => {
-    setAiLoading(prev => ({ ...prev, ranking: true }));
+  const handleRankInline = async (candidateId) => {
+    setRankingInline(prev => ({ ...prev, [candidateId]: true }));
     try {
-      await aiApi.rankCandidates(profileId);
+      await aiApi.rankCV(candidateId);
       load();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to rank'); }
-    finally { setAiLoading(prev => ({ ...prev, ranking: false })); }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to rank CV');
+    } finally {
+      setRankingInline(prev => ({ ...prev, [candidateId]: false }));
+    }
+  };
+
+  const handleDelete = async (candidateId, name) => {
+    const ok = await confirm({ title: 'Delete Candidate', message: `Delete "${name || 'Unknown'}"? This action cannot be undone.`, confirmText: 'Delete', variant: 'danger' });
+    if (!ok) return;
+    try {
+      await candidatesApi.delete(candidateId);
+      toast.success('Candidate deleted');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete candidate');
+    }
   };
 
   const showCandidateInfo = async (candidateId) => {
     setDetailsLoading(true);
     setSelectedCandidate(null);
+    setRankingResult(null);
     try {
       const res = await candidatesApi.getById(candidateId);
-      setSelectedCandidate(res.data.candidate);
+      const cand = res.data.candidate;
+      setSelectedCandidate(cand);
+      // Load cached ranking if exists
+      if (cand.ai_response_cache) {
+        try { setRankingResult({ ranking: JSON.parse(cand.ai_response_cache), cached: true }); } catch {}
+      }
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to load candidate information');
+      toast.error(err.response?.data?.error || 'Failed to load candidate information');
     } finally {
       setDetailsLoading(false);
     }
@@ -100,7 +155,7 @@ export default function Candidates() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to download CV');
+      toast.error(err.response?.data?.error || 'Failed to download CV');
     }
   };
 
@@ -116,63 +171,59 @@ export default function Candidates() {
     }
   };
 
-  const parseScoreDetails = (value) => {
-    const labels = {
-      'Recommendation': 'Recommendation',
-      'Why score is lower': 'Why Score Is Lower',
-      'Critical missing skills': 'Critical Missing Skills',
-      'Missing skills': 'Missing Skills',
-      'Weaknesses': 'Weaknesses',
-      'Strengths': 'Strengths',
-      'Matched skills': 'Matched Skills',
-    };
 
-    return String(value || '')
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map((line, index) => {
-        const match = line.match(/^([^:]+):\s*(.*)$/);
-        let label = 'Detail';
-        let content = line;
-
-        if (match && labels[match[1]]) {
-          label = labels[match[1]];
-          content = match[2];
-        } else if (index === 0) {
-          label = 'Summary';
-          content = line.replace(/^(Match Summary|Summary):\s*/i, '');
-        } else if (match) {
-          label = match[1];
-          content = match[2];
-        }
-
-        let items = [];
-        if (label === 'Summary' || label === 'Recommendation') {
-          // split by sentences
-          items = content.split(/\.\s+/).map(item => {
-            let trimmed = item.trim();
-            if (trimmed && !trimmed.endsWith('.')) trimmed += '.';
-            return trimmed;
-          }).filter(Boolean);
-        } else {
-          // split by semicolon or comma
-          items = content.split(/[;,]\s*/).map(item => item.trim()).filter(Boolean);
-        }
-
-        return { label, items: items.length ? items : [content] };
-      });
-  };
 
   const handleStatusChange = async (id, newStatus) => {
     try { await candidatesApi.updateStatus(id, newStatus); load(); }
     catch (err) { console.error(err); }
   };
 
+  // Schedule interview
+  const openSchedule = (candidate) => {
+    setScheduleTarget(candidate);
+    setScheduleStep('form');
+    setScheduleForm({
+      type: 'Interview', subject: `Interview - ${candidate.name || 'Candidate'}`,
+      start_date: '', end_date: '', platform: 'Google Meet', link: '', content: '',
+    });
+  };
+
+  const goToPreview = () => {
+    if (!scheduleForm.start_date || !scheduleForm.end_date || !scheduleForm.content) return;
+    setScheduleStep('preview');
+  };
+
+  const handleScheduleSend = async (finalNotes) => {
+    if (!scheduleTarget) return;
+    setScheduling(true);
+    try {
+      await meetingsApi.create({
+        fk_candidate: scheduleTarget.id,
+        ...scheduleForm,
+        content: finalNotes || scheduleForm.content,
+      });
+      setScheduleTarget(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to schedule interview');
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const filtered = candidates.filter(c => {
     const matchSearch = !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
-    return matchSearch && matchStatus;
+    let matchScore = true;
+    if (scoreFilter !== 'all') {
+      const score = c.score_value;
+      if (scoreFilter === 'none') matchScore = score == null;
+      else if (scoreFilter === '80+') matchScore = score != null && score >= 80;
+      else if (scoreFilter === '60+') matchScore = score != null && score >= 60;
+      else if (scoreFilter === '40+') matchScore = score != null && score >= 40;
+      else if (scoreFilter === '<40') matchScore = score != null && score < 40;
+    }
+    return matchSearch && matchStatus && matchScore;
   });
 
   if (loading) return <LoadingSpinner text="Loading candidates..." />;
@@ -180,39 +231,46 @@ export default function Candidates() {
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Candidates</h1>
-          <p className="text-slate-500 text-sm mt-1">{candidates.length} total · {profiles.length} position(s)</p>
+          <h1 className="text-[1.85rem] font-bold text-slate-900 dark:text-slate-50 tracking-tight">Candidates</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{candidates.length} total · {profiles.length} position(s)</p>
         </div>
         <div className="flex gap-2">
-          {profiles.length > 0 && (
-            <button onClick={() => handleRank(profiles[0].id)} disabled={aiLoading.ranking}
-              className="inline-flex items-center gap-2 bg-amber-50 text-amber-700 font-semibold px-4 py-2.5 rounded-xl text-sm border border-amber-200 hover:bg-amber-100 transition disabled:opacity-50">
-              <ArrowUpDown className="w-4 h-4" /> {aiLoading.ranking ? 'Ranking...' : 'AI Rank All'}
-            </button>
-          )}
+          <button onClick={handleRankAll} disabled={rankAllLoading || candidates.length === 0}
+            className="btn-magnetic inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow-[0_4px_16px_rgba(16,185,129,0.3)] text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+            {rankAllLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Ranking...</> : <><ListChecks className="w-4 h-4" /> Rank All</>}
+          </button>
           <button onClick={() => setShowAddProfile(true)}
-            className="inline-flex items-center gap-2 bg-prpl text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition hover:-translate-y-0.5 hover:shadow-md text-sm">
+            className="btn-magnetic inline-flex items-center gap-2 bg-gradient-to-r from-prpl to-purple-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow-[0_4px_16px_rgba(124,58,237,0.3)] text-sm">
             <Plus className="w-4 h-4" /> Add Position
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-3 mb-6 animate-fade-in" style={{ animationDelay: '75ms' }}>
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
           <input type="text" placeholder="Search by name or email..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-prpl transition" />
+            className="w-full h-11 pl-11 pr-4 rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-800 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition placeholder:text-slate-400 dark:placeholder:text-slate-500" />
         </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-prpl">
+          className="h-11 px-3 rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition cursor-pointer">
           <option value="all">All Status</option>
           <option value="received">Received</option>
           <option value="selected">Selected</option>
           <option value="validated">Validated</option>
           <option value="Declined">Declined</option>
+        </select>
+        <select value={scoreFilter} onChange={(e) => setScoreFilter(e.target.value)}
+          className="h-11 px-3 rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition cursor-pointer">
+          <option value="all">All Scores</option>
+          <option value="80+">Score ≥ 80</option>
+          <option value="60+">Score ≥ 60</option>
+          <option value="40+">Score ≥ 40</option>
+          <option value="<40">Score &lt; 40</option>
+          <option value="none">Not Ranked</option>
         </select>
       </div>
 
@@ -220,12 +278,12 @@ export default function Candidates() {
       {profiles.length > 0 && (
         <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
           {profiles.map(p => (
-            <div key={p.id} className="shrink-0 bg-white rounded-xl border border-slate-200 px-4 py-3 min-w-[200px]">
-              <p className="font-semibold text-sm text-slate-800">{p.title}</p>
-              <p className="text-xs text-slate-400 mt-1">{p.Candidates?.length || 0} candidates</p>
+            <div key={p.id} className="shrink-0 rounded-xl surface-primary px-4 py-3 min-w-[200px]">
+              <p className="font-semibold text-sm text-slate-800 dark:text-slate-100">{p.title}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{p.Candidates?.length || 0} candidates</p>
               <div className="flex gap-1 mt-2 flex-wrap">
                 {p.technicalSkills?.split(',').slice(0, 3).map((s, i) => (
-                  <span key={i} className="px-2 py-0.5 bg-prpl/8 text-prpl text-[10px] font-medium rounded-full">{s.trim()}</span>
+                  <span key={i} className="px-2 py-0.5 bg-prpl/8 dark:bg-prpl/15 text-prpl text-[10px] font-medium rounded-full">{s.trim()}</span>
                 ))}
               </div>
             </div>
@@ -237,32 +295,32 @@ export default function Candidates() {
       {filtered.length === 0 ? (
         <EmptyState icon={Users} title="No candidates yet" description="Share the apply link to start receiving applications." />
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden">
+        <div className="rounded-2xl surface-primary overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase">Candidate</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase">Position</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase">Status</th>
-                <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase">AI Score</th>
-                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase">Actions</th>
+              <tr className="border-b border-slate-200/40 dark:border-white/[0.04]">
+                <th className="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.12em]">Candidate</th>
+                <th className="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.12em]">Position</th>
+                <th className="text-left px-5 py-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.12em]">Status</th>
+                <th className="text-center px-5 py-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.12em]">AI Score</th>
+                <th className="text-right px-5 py-3 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.12em]">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100/80 dark:divide-white/[0.03]">
               {filtered.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/60 transition">
+                <tr key={c.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition group">
                   <td className="px-5 py-4">
                     <div>
-                      <p className="font-semibold text-sm text-slate-800">{c.name || 'Unknown'}</p>
-                      <p className="text-xs text-slate-400">{c.email || 'No email'}</p>
+                      <p className="font-semibold text-sm text-slate-800 dark:text-slate-100 group-hover:text-prpl transition">{c.name || 'Unknown'}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{c.email || 'No email'}</p>
                     </div>
                   </td>
                   <td className="px-5 py-4">
-                    <p className="text-sm text-slate-600">{c.Profile?.title || '—'}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">{c.Profile?.title || '—'}</p>
                   </td>
                   <td className="px-5 py-4">
                     <select value={c.status} onChange={(e) => handleStatusChange(c.id, e.target.value)}
-                      className="text-xs font-semibold px-2 py-1 rounded-lg border border-slate-200 bg-white outline-none focus:border-prpl cursor-pointer">
+                      className="text-xs font-semibold px-2 py-1 rounded-lg border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-slate-700 dark:text-slate-200 outline-none focus:border-prpl cursor-pointer">
                       <option value="received">Received</option>
                       <option value="selected">Selected</option>
                       <option value="validated">Validated</option>
@@ -272,34 +330,28 @@ export default function Candidates() {
                   </td>
                   <td className="px-5 py-4 text-center">
                     {c.score_value != null ? (
-                      <div className="inline-flex items-center gap-1.5">
-                        <div className="w-10 h-10 rounded-full border-3 border-prpl/20 flex items-center justify-center relative">
-                          <span className="text-xs font-bold text-prpl">{c.score_value}</span>
-                          <svg className="absolute inset-0 w-10 h-10 -rotate-90">
-                            <circle cx="20" cy="20" r="17" fill="none" stroke="#5523e9" strokeWidth="3"
-                              strokeDasharray={`${(c.score_value / 100) * 106.8} 106.8`} strokeLinecap="round" />
-                          </svg>
-                        </div>
-                      </div>
-                    ) : <span className="text-xs text-slate-300">—</span>}
+                      <ProgressRing value={c.score_value} size={40} strokeWidth={3} showValue={true} label="" className="" />
+                    ) : <span className="text-xs text-slate-300 dark:text-slate-600">—</span>}
                   </td>
                   <td className="px-5 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => handleParseCV(c.id)} disabled={aiLoading[c.id] || c.technical_skills}
-                        className={`p-2 rounded-lg transition ${c.technical_skills ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-prpl hover:bg-prpl/8 disabled:opacity-50'}`} 
-                        title={c.technical_skills ? 'CV already parsed' : 'Parse CV with AI'}>
-                        <Brain className="w-4 h-4" />
-                      </button>
-                      {c.fk_profile && (
-                        <button onClick={() => handleMatchScore(c.id, c.fk_profile)} disabled={aiLoading[`match-${c.id}`] || c.score_value != null}
-                          className={`p-2 rounded-lg transition ${c.score_value != null ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-50'}`} 
-                          title={c.score_value != null ? 'Score already calculated' : 'Calculate AI Match Score'}>
-                          <Sparkles className="w-4 h-4" />
+                      {c.cv_s3_path && c.cv_s3_path !== 'no-cv' && (
+                        <button onClick={() => handleRankInline(c.id)} disabled={rankingInline[c.id]}
+                          className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-prpl hover:bg-prpl/8 dark:hover:bg-prpl/12 transition disabled:opacity-50" title="Rank with AI">
+                          {rankingInline[c.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                         </button>
                       )}
+                      <button onClick={() => openSchedule(c)}
+                        className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 hover:bg-emerald-500/8 dark:hover:bg-emerald-500/12 transition" title="Schedule Interview">
+                        <CalendarDays className="w-4 h-4" />
+                      </button>
                       <button onClick={() => showCandidateInfo(c.id)}
-                        className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="Show candidate information">
+                        className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-blue-600 hover:bg-blue-500/8 dark:hover:bg-blue-500/12 transition" title="View & Rank">
                         <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(c.id, c.name)}
+                        className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-500/8 dark:hover:bg-red-500/12 transition" title="Delete Candidate">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -312,10 +364,10 @@ export default function Candidates() {
 
       {/* Apply link */}
       {profiles.length > 0 && (
-        <div className="mt-6 bg-prpl/5 rounded-xl border border-prpl/10 p-4">
-          <p className="text-sm font-medium text-prpl mb-1">📎 Public Apply Link</p>
-          <p className="text-xs text-slate-500">Share this link with candidates:</p>
-          <code className="block mt-2 text-xs bg-white px-3 py-2 rounded-lg border border-slate-200 text-slate-700 select-all">
+        <div className="mt-6 rounded-2xl surface-primary p-5 border-l-2 border-prpl">
+          <p className="text-sm font-semibold text-prpl mb-1 flex items-center gap-2">📎 Public Apply Link</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Share this link with candidates:</p>
+          <code className="block mt-2 text-xs bg-slate-50/80 dark:bg-white/[0.03] px-3 py-2.5 rounded-xl border border-slate-200/60 dark:border-white/[0.06] text-slate-700 dark:text-slate-200 select-all">
             {window.location.origin}/apply/{profiles[0].id}
           </code>
         </div>
@@ -326,6 +378,8 @@ export default function Candidates() {
         isOpen={detailsLoading || !!selectedCandidate}
         onClose={() => { setSelectedCandidate(null); setDetailsLoading(false); }}
         title="Candidate Information"
+        subtitle={selectedCandidate ? (selectedCandidate.Profile?.title || 'Candidate details') : ''}
+        icon={Eye}
         size="xl"
       >
         {detailsLoading ? (
@@ -334,8 +388,8 @@ export default function Candidates() {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">{selectedCandidate.name || 'Unknown candidate'}</h3>
-                <p className="text-sm text-slate-500 mt-1">{selectedCandidate.Profile?.title || 'No position'}</p>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{selectedCandidate.name || 'Unknown candidate'}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{selectedCandidate.Profile?.title || 'No position'}</p>
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status={selectedCandidate.status} />
@@ -348,9 +402,9 @@ export default function Candidates() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <h4 className="text-sm font-bold text-slate-800 mb-3">Contact</h4>
-                <div className="space-y-2 text-sm text-slate-600">
+              <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] p-4">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">Contact</h4>
+                <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
                   <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-slate-400" /> {selectedCandidate.email || 'No email'}</p>
                   <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-slate-400" /> {selectedCandidate.phone || 'No phone'}</p>
                   <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" /> {selectedCandidate.location || 'No location'}</p>
@@ -358,17 +412,17 @@ export default function Candidates() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 p-4">
-                <h4 className="text-sm font-bold text-slate-800 mb-3">CV</h4>
+              <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] p-4">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">CV</h4>
                 {selectedCandidate.cv_s3_path && selectedCandidate.cv_s3_path !== 'no-cv' ? (
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                       <FileText className="w-4 h-4 text-slate-400" />
                       <span className="truncate">{selectedCandidate.cv_s3_path}</span>
                     </div>
                     <button
                       onClick={() => downloadCandidateCv(selectedCandidate)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 dark:bg-white/10 text-white text-sm font-semibold hover:bg-slate-800 dark:hover:bg-white/15 transition"
                     >
                       <Download className="w-4 h-4" /> Download CV
                     </button>
@@ -379,23 +433,23 @@ export default function Candidates() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 p-4">
-              <h4 className="text-sm font-bold text-slate-800 mb-3">Profile Details</h4>
+            <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] p-4">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">Profile Details</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-xs font-semibold uppercase text-slate-400 mb-1">Education</p>
-                  <p className="text-slate-700">{selectedCandidate.education || 'Not provided'}</p>
+                  <p className="text-slate-700 dark:text-slate-300">{selectedCandidate.education || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase text-slate-400 mb-1">Experience</p>
-                  <p className="text-slate-700">{selectedCandidate.years_of_experience ?? 'Not provided'} years</p>
+                  <p className="text-slate-700 dark:text-slate-300">{selectedCandidate.years_of_experience ?? 'Not provided'} years</p>
                 </div>
               </div>
 
               {selectedCandidate.summary && (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase text-slate-400 mb-1">Summary</p>
-                  <p className="text-sm text-slate-700 leading-relaxed">{selectedCandidate.summary}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{selectedCandidate.summary}</p>
                 </div>
               )}
             </div>
@@ -407,8 +461,8 @@ export default function Candidates() {
               ['Certifications', parseList(selectedCandidate.certifications)],
               ['Hobbies', parseList(selectedCandidate.hobbies)],
             ].some(([, items]) => items.length > 0) && (
-              <div className="rounded-xl border border-slate-200 p-4">
-                <h4 className="text-sm font-bold text-slate-800 mb-3">Skills & Extras</h4>
+              <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] p-4">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">Skills & Extras</h4>
                 <div className="space-y-3">
                   {[
                     ['Technical Skills', parseList(selectedCandidate.technical_skills)],
@@ -421,7 +475,7 @@ export default function Candidates() {
                       <p className="text-xs font-semibold uppercase text-slate-400 mb-2">{label}</p>
                       <div className="flex flex-wrap gap-2">
                         {items.map((item, index) => (
-                          <span key={`${label}-${index}`} className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+                          <span key={`${label}-${index}`} className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 text-xs font-medium">
                             {item}
                           </span>
                         ))}
@@ -433,69 +487,111 @@ export default function Candidates() {
             )}
 
             {parseExperiences(selectedCandidate.experiences).length > 0 && (
-              <div className="rounded-xl border border-slate-200 p-4">
-                <h4 className="text-sm font-bold text-slate-800 mb-3">Experiences</h4>
+              <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] p-4">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">Experiences</h4>
                 <div className="space-y-3">
                   {parseExperiences(selectedCandidate.experiences).map((exp, index) => (
                     <div key={index} className="border-l-2 border-prpl/20 pl-3">
-                      <p className="text-sm font-semibold text-slate-800">{exp.title || 'Experience'} {exp.company ? `at ${exp.company}` : ''}</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{exp.title || 'Experience'} {exp.company ? `at ${exp.company}` : ''}</p>
                       {exp.duration && <p className="text-xs text-slate-400 mt-0.5">{exp.duration}</p>}
-                      {exp.description && <p className="text-sm text-slate-600 mt-1 leading-relaxed">{exp.description}</p>}
+                      {exp.description && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{exp.description}</p>}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {(selectedCandidate.score_description || selectedCandidate.AiAnalyses?.length > 0) && (
-              <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/50">
-                <div className="flex items-center gap-2 mb-4">
+            {/* ── Dynamic AI Ranking Panel ── */}
+            <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] p-5 bg-gradient-to-br from-slate-50/80 to-purple-50/30 dark:from-white/[0.02] dark:to-prpl/[0.03]">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
                   <Brain className="w-5 h-5 text-prpl" />
-                  <h4 className="text-sm font-bold text-slate-800">AI Analysis & Scoring</h4>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">AI Analysis & Ranking</h4>
                 </div>
-                
-                {selectedCandidate.score_description && (
-                  <div className="space-y-4">
-                    {parseScoreDetails(selectedCandidate.score_description).map((section, sectionIndex) => {
-                      
-                      let Icon = Info;
-                      let iconColor = "text-blue-500";
-                      let bgColor = "bg-blue-50";
-                      
-                      if (section.label === 'Strengths' || section.label === 'Matched Skills') {
-                        Icon = CheckCircle2; iconColor = "text-emerald-500"; bgColor = "bg-emerald-50";
-                      } else if (section.label === 'Weaknesses' || section.label.includes('Missing') || section.label.includes('Why Score')) {
-                        Icon = XCircle; iconColor = "text-rose-500"; bgColor = "bg-rose-50";
-                      } else if (section.label === 'Recommendation') {
-                        Icon = ThumbsUp; iconColor = "text-prpl"; bgColor = "bg-prpl/10";
-                      }
-
-                      return (
-                        <div key={`${section.label}-${sectionIndex}`} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className={`p-1.5 rounded-lg ${bgColor}`}>
-                              <Icon className={`w-4 h-4 ${iconColor}`} />
-                            </div>
-                            <p className="text-sm font-bold uppercase text-slate-800">{section.label}</p>
-                          </div>
-                          <ul className="space-y-2.5">
-                            {section.items.map((item, itemIndex) => (
-                              <li key={`${section.label}-${itemIndex}`} className="flex items-start gap-2.5 text-sm text-slate-600 leading-relaxed">
-                                <span className={`mt-2 h-1.5 w-1.5 rounded-full shrink-0 ${iconColor.replace('text-', 'bg-')}`} />
-                                <span>{item}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {selectedCandidate.AiAnalyses?.length > 0 && (
-                  <p className="text-xs text-slate-400 mt-4 text-center">Based on {selectedCandidate.AiAnalyses.length} AI analysis record(s)</p>
+                {(!rankingResult || rankingResult.cached) && selectedCandidate.cv_s3_path && selectedCandidate.cv_s3_path !== 'no-cv' && (
+                  <button onClick={() => handleRankCV(selectedCandidate.id)} disabled={rankingLoading}
+                    className="btn-magnetic inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-prpl to-purple-600 text-white text-xs font-semibold shadow-[0_4px_14px_rgba(124,58,237,0.25)] disabled:opacity-50 transition-all">
+                    {rankingLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analyzing...</> : <><Sparkles className="w-3.5 h-3.5" /> {rankingResult ? 'Re-rank' : 'Rank with AI'}</>}
+                  </button>
                 )}
               </div>
-            )}
+
+              {rankingLoading && (
+                <div className="flex flex-col items-center py-10 gap-3">
+                  <div className="relative"><div className="w-14 h-14 rounded-full border-3 border-prpl/20 border-t-prpl animate-spin" /></div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 animate-pulse">AI is analyzing the CV...</p>
+                </div>
+              )}
+
+              {!rankingLoading && !rankingResult && (
+                <div className="text-center py-8">
+                  <Sparkles className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Click <strong>"Rank with AI"</strong> to analyze this CV</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">One-time analysis · Results are cached</p>
+                </div>
+              )}
+
+              {!rankingLoading && rankingResult?.ranking && (() => {
+                const r = rankingResult.ranking;
+                const scoreColor = r.score >= 70 ? 'text-emerald-500' : r.score >= 40 ? 'text-amber-500' : 'text-rose-500';
+                const scoreBg = r.score >= 70 ? 'from-emerald-500' : r.score >= 40 ? 'from-amber-500' : 'from-rose-500';
+                const recColor = r.recommendation === 'hire' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : r.recommendation === 'consider' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+                const RecIcon = r.recommendation === 'hire' ? ThumbsUp : r.recommendation === 'consider' ? TrendingUp : ThumbsDown;
+                return (
+                  <div className="space-y-4">
+                    {/* Score + Match + Recommendation row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200/50 dark:border-white/[0.06] p-4 text-center">
+                        <div className="mx-auto mb-2 flex justify-center">
+                          <ProgressRing value={r.score} size={64} strokeWidth={4} label="" />
+                        </div>
+                        <p className="text-[10px] font-semibold uppercase text-slate-400">AI Score</p>
+                      </div>
+                      <div className="rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200/50 dark:border-white/[0.06] p-4 text-center">
+                        <p className={`text-3xl font-bold bg-gradient-to-r ${scoreBg} to-blue-500 bg-clip-text text-transparent mt-3`}>{r.matchPercent}%</p>
+                        <p className="text-[10px] font-semibold uppercase text-slate-400 mt-2">Job Match</p>
+                      </div>
+                      <div className="rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200/50 dark:border-white/[0.06] p-4 text-center flex flex-col items-center justify-center">
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${recColor}`}>
+                          <RecIcon className="w-3.5 h-3.5" /> {(r.recommendation || '').toUpperCase()}
+                        </div>
+                        <p className="text-[10px] font-semibold uppercase text-slate-400 mt-2">Recommendation</p>
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    {r.summary && <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed bg-white dark:bg-white/[0.03] rounded-xl p-4 border border-slate-200/50 dark:border-white/[0.06] italic">"{r.summary}"</p>}
+
+                    {/* Strengths + Weaknesses */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-white dark:bg-white/[0.04] border border-emerald-200/50 dark:border-emerald-500/10 p-4">
+                        <p className="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Strengths</p>
+                        <ul className="space-y-1.5">{(r.strengths||[]).map((s,i) => <li key={i} className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />{s}</li>)}</ul>
+                      </div>
+                      <div className="rounded-xl bg-white dark:bg-white/[0.04] border border-rose-200/50 dark:border-rose-500/10 p-4">
+                        <p className="text-xs font-bold uppercase text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> Weaknesses</p>
+                        <ul className="space-y-1.5">{(r.weaknesses||[]).map((w,i) => <li key={i} className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />{w}</li>)}</ul>
+                      </div>
+                    </div>
+
+                    {/* Detailed eval */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {[['Technical Fit', r.technicalFit, Zap, 'text-blue-500'], ['Experience', r.experienceEval, Shield, 'text-amber-500'], ['Communication', r.communicationQuality, TrendingUp, 'text-emerald-500']].map(([label, val, Icon, color]) => val && (
+                        <div key={label} className="rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200/50 dark:border-white/[0.06] p-3">
+                          <p className={`text-[10px] font-bold uppercase ${color} mb-1.5 flex items-center gap-1`}><Icon className="w-3 h-3" /> {label}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{val}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Seniority badge */}
+                    {r.seniorityLevel && <p className="text-center"><span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-prpl/8 text-prpl text-xs font-bold"><Shield className="w-3 h-3" /> {r.seniorityLevel.charAt(0).toUpperCase() + r.seniorityLevel.slice(1)} Level</span></p>}
+
+                    {rankingResult.cached && <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center">Cached result · Click "Re-rank" to refresh</p>}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         )}
       </Modal>
@@ -540,6 +636,118 @@ export default function Candidates() {
           </div>
         </form>
       </Modal>
+
+      {/* Schedule Interview Modal — two-step flow */}
+      <Modal
+        isOpen={!!scheduleTarget}
+        onClose={() => setScheduleTarget(null)}
+        title={scheduleStep === 'form' ? 'Schedule Interview' : 'Preview Email'}
+        subtitle={scheduleTarget ? `${scheduleTarget.name || 'Candidate'} · ${scheduleTarget.Profile?.title || 'Position'}` : ''}
+        icon={CalendarDays}
+        iconColor="text-emerald-500"
+        iconBg="bg-emerald-500/10 dark:bg-emerald-500/20"
+        size="lg"
+      >
+        {scheduleStep === 'form' ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Subject</label>
+                <input type="text" value={scheduleForm.subject}
+                  onChange={e => setScheduleForm({...scheduleForm, subject: e.target.value})}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition"
+                  placeholder="e.g., Technical Round 1" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Type</label>
+                <select value={scheduleForm.type}
+                  onChange={e => setScheduleForm({...scheduleForm, type: e.target.value})}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition">
+                  <option value="Interview">Interview</option>
+                  <option value="Technical Test">Technical Test</option>
+                  <option value="HR Screen">HR Screen</option>
+                  <option value="Final Round">Final Round</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Start *</label>
+                <input type="datetime-local" value={scheduleForm.start_date}
+                  onChange={e => setScheduleForm({...scheduleForm, start_date: e.target.value})}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition"
+                  required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">End *</label>
+                <input type="datetime-local" value={scheduleForm.end_date}
+                  onChange={e => setScheduleForm({...scheduleForm, end_date: e.target.value})}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition"
+                  required />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Platform</label>
+                <select value={scheduleForm.platform}
+                  onChange={e => setScheduleForm({...scheduleForm, platform: e.target.value})}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition">
+                  <option value="Google Meet">Google Meet</option>
+                  <option value="Zoom">Zoom</option>
+                  <option value="Microsoft Teams">Microsoft Teams</option>
+                  <option value="In-Person">In-Person</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Meeting Link</label>
+                <input type="url" value={scheduleForm.link}
+                  onChange={e => setScheduleForm({...scheduleForm, link: e.target.value})}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition"
+                  placeholder="https://meet.google.com/..." />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Notes / Message *</label>
+              <textarea value={scheduleForm.content}
+                onChange={e => setScheduleForm({...scheduleForm, content: e.target.value})}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 resize-none transition"
+                rows={3} placeholder="Interview details, topics to cover..." required />
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button type="button" onClick={() => setScheduleTarget(null)}
+                className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.04] rounded-xl transition">
+                Cancel
+              </button>
+              <button onClick={goToPreview}
+                disabled={!scheduleForm.start_date || !scheduleForm.end_date || !scheduleForm.content}
+                className="btn-magnetic px-5 py-2.5 bg-gradient-to-r from-prpl to-purple-600 text-white text-sm font-semibold rounded-xl shadow-[0_4px_14px_rgba(124,58,237,0.3)] disabled:opacity-50 transition-all">
+                Preview Email →
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <button onClick={() => setScheduleStep('form')}
+              className="text-xs font-medium text-prpl hover:text-prpl/80 transition flex items-center gap-1 mb-2">
+              ← Back to form
+            </button>
+            <EmailPreview
+              candidateName={scheduleTarget?.name || 'Candidate'}
+              jobTitle={scheduleTarget?.Profile?.title || 'Position'}
+              date={scheduleForm.start_date}
+              startTime={scheduleForm.start_date ? new Date(scheduleForm.start_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
+              endTime={scheduleForm.end_date ? new Date(scheduleForm.end_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
+              platform={scheduleForm.platform}
+              meetingLink={scheduleForm.link}
+              interviewerName="HR Team"
+              notes={scheduleForm.content}
+              onSend={handleScheduleSend}
+              sending={scheduling}
+            />
+          </div>
+        )}
+      </Modal>
+      {ConfirmDialog}
     </>
   );
 }

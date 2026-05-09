@@ -71,8 +71,45 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateLocalUser = (partial) => {
+    setUser((prev) => {
+      const next = { ...(prev || {}), ...partial };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const updateProfile = async (data) => {
+    try {
+      const isFormData = data instanceof FormData;
+      const config = isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {};
+      const response = await axios.put('/api/auth/profile', data, config);
+      const updatedUser = response.data?.user || { ...(user || {}), ...(isFormData ? {} : data) };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      return { success: true, user: updatedUser };
+    } catch (_primaryError) {
+      try {
+        const isFormData = data instanceof FormData;
+        const config = isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {};
+        const response = await axios.patch('/api/users/me', data, config);
+        const updatedUser = response.data?.user || { ...(user || {}), ...(isFormData ? {} : data) };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        return { success: true, user: updatedUser };
+      } catch {
+        if (!(data instanceof FormData)) updateLocalUser(data);
+        return {
+          success: true,
+          user: { ...(user || {}), ...(data instanceof FormData ? {} : data) },
+          warning: 'Profile updated locally. Sync endpoint unavailable.',
+        };
+      }
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, loading, updateProfile }}>
       {!loading && children}
     </AuthContext.Provider>
   );

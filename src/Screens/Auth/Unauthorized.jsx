@@ -12,8 +12,8 @@ export default function Unauthorized() {
         <p className="text-slate-500 mb-8">
           You don't have the necessary permissions to view this page. Contact your administrator if you believe this is a mistake.
         </p>
-        <Link to="/dashboard" className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:border-prpl/40 hover:text-prpl transition">
-          <ArrowLeft className="w-4 h-4" /> Return to Dashboard
+        <Link to="/workspace" className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:border-prpl/40 hover:text-prpl transition">
+          <ArrowLeft className="w-4 h-4" /> Return to Workspace
         </Link>
       </div>
     </div>

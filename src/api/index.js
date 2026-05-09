@@ -34,6 +34,7 @@ export const projectsApi = {
   create: (data) => api.post("/projects", data),
   update: (id, data) => api.put(`/projects/${id}`, data),
   archive: (id) => api.delete(`/projects/${id}`),
+  toggleStatus: (id) => api.patch(`/projects/${id}/toggle-status`),
   stats: () => api.get("/projects/stats"),
 };
 
@@ -63,18 +64,22 @@ export const candidatesApi = {
 // ── Meetings ──────────────────────────────────
 export const meetingsApi = {
   create: (data) => api.post("/meetings", data),
+  listAll: () => api.get("/meetings/all"),
   listByCandidate: (candidateId) => api.get(`/meetings/candidate/${candidateId}`),
   listByProject: (projectId) => api.get(`/meetings/project/${projectId}`),
   update: (id, data) => api.put(`/meetings/${id}`, data),
-  cancel: (id) => api.patch(`/meetings/${id}/cancel`),
+  cancel: (id, sendEmail = false) => api.patch(`/meetings/${id}/cancel`, { sendEmail }),
+  delete: (id, sendEmail = false) => api.delete(`/meetings/${id}`, { data: { sendEmail } }),
 };
 
 // ── AI ────────────────────────────────────────
 export const aiApi = {
+  rankCV: (candidateId, force = false) => api.post(`/ai/rank-cv/${candidateId}${force ? '?force=true' : ''}`, {}),
+  rankAll: (projectId, force = false) => api.post(`/ai/rank-all/${projectId}${force ? '?force=true' : ''}`, {}),
   generateDescription: (data) => api.post("/ai/generate-description", data),
-  parseCv: (candidateId) => api.post(`/ai/parse-cv/${candidateId}`, {}),
-  matchScore: (candidateId, profileId) => api.post(`/ai/match-score/${candidateId}/${profileId}`, {}),
-  rankCandidates: (profileId) => api.post(`/ai/rank/${profileId}`, {}),
+  recommendations: (data, force = false) => api.post(`/ai/recommendations${force ? '?force=true' : ''}`, data),
+  generatePost: (data) => api.post("/ai/generate-post", data),
+  chat: (messages) => api.post("/ai/chat", { messages }),
 };
 
 // ── LinkedIn ──────────────────────────────────

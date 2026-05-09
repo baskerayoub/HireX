@@ -1,14 +1,22 @@
-export default function LoadingSpinner({ size = 'md', text = '' }) {
-  const sizeClass = {
-    sm: 'w-5 h-5 border-2',
-    md: 'w-8 h-8 border-3',
-    lg: 'w-12 h-12 border-4',
-  }[size];
+export default function LoadingSpinner({ text = 'Loading...', size = 'md' }) {
+  const sizes = {
+    sm: 'w-6 h-6',
+    md: 'w-10 h-10',
+    lg: 'w-14 h-14',
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center py-12 gap-3">
-      <div className={`${sizeClass} border-prpl/20 border-t-prpl rounded-full animate-spin`} />
-      {text && <p className="text-sm text-slate-500">{text}</p>}
+    <div className="flex flex-col items-center justify-center py-16 animate-fade-in">
+      <div className="relative">
+        <div className={`${sizes[size]} border-2 border-prpl/15 border-t-prpl rounded-full animate-spin`} />
+        <div
+          className={`absolute inset-0 ${sizes[size]} border-2 border-accent/10 border-b-accent rounded-full animate-spin`}
+          style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}
+        />
+      </div>
+      {text && (
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-4">{text}</p>
+      )}
     </div>
   );
 }
