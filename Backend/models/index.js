@@ -188,6 +188,12 @@ if (db.users && db.ai_recommendation_cache) {
   db.ai_recommendation_cache.belongsTo(db.users, { as: "User", foreignKey: "fk_user" });
 }
 
+// User <-> Chat Conversation (1-N)
+if (db.users && db.chat_conversation) {
+  db.users.hasMany(db.chat_conversation, { as: "ChatConversations", foreignKey: "fk_user" });
+  db.chat_conversation.belongsTo(db.users, { as: "User", foreignKey: "fk_user" });
+}
+
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 

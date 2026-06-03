@@ -18,6 +18,7 @@ router.get("/project/:projectId", candidateController.listByProject);
 router.get("/:id/cv/download", candidateController.downloadCv);
 router.get("/:id", candidateController.getById);
 router.patch("/:id/status", candidateController.updateStatus);
+router.patch("/:id/hire", candidateController.hireCandidate);
 router.delete("/:id", candidateController.delete);
 
 module.exports = router;

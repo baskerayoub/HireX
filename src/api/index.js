@@ -58,6 +58,7 @@ export const candidatesApi = {
   getById: (id) => api.get(`/candidates/${id}`),
   downloadCv: (id) => api.get(`/candidates/${id}/cv/download`, { responseType: "blob" }),
   updateStatus: (id, status) => api.patch(`/candidates/${id}/status`, { status }),
+  hire: (id) => api.patch(`/candidates/${id}/hire`),
   delete: (id) => api.delete(`/candidates/${id}`),
 };
 
@@ -80,6 +81,11 @@ export const aiApi = {
   recommendations: (data, force = false) => api.post(`/ai/recommendations${force ? '?force=true' : ''}`, data),
   generatePost: (data) => api.post("/ai/generate-post", data),
   chat: (messages) => api.post("/ai/chat", { messages }),
+  // Chat conversation persistence
+  listConversations: () => api.get("/ai/conversations"),
+  getConversation: (id) => api.get(`/ai/conversations/${id}`),
+  saveConversation: (data) => api.post("/ai/conversations", data),
+  deleteConversation: (id) => api.delete(`/ai/conversations/${id}`),
 };
 
 // ── LinkedIn ──────────────────────────────────
@@ -89,6 +95,14 @@ export const linkedinApi = {
   status: () => api.get("/linkedin/status"),
   publish: (data) => api.post("/linkedin/publish", data),
   disconnect: () => api.delete("/linkedin/disconnect"),
+};
+
+// ── Users ─────────────────────────────────────
+export const usersApi = {
+  list: () => api.get("/users"),
+  create: (data) => api.post("/users", data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
 };
 
 export default api;

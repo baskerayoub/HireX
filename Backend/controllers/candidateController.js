@@ -251,13 +251,54 @@ exports.downloadCv = async (req, res) => {
   }
 };
 
+// Hire candidate
+exports.hireCandidate = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const cand = await candidate.findByPk(id, {
+      include: [
+        { model: profile, as: "Profile", include: [{ model: project, as: "Project" }] },
+        { model: meeting, as: "Meetings" },
+      ],
+    });
+
+    if (!cand) {
+      return res.status(404).json({ error: "Candidate not found" });
+    }
+
+    if (cand.status === "hired") {
+      return res.status(409).json({ error: "Candidate is already hired" });
+    }
+
+    // Update candidate status to hired
+    await cand.update({ status: "hired" });
+
+    // Auto-complete all meetings for this candidate
+    if (cand.Meetings && cand.Meetings.length > 0) {
+      await meeting.update(
+        { status: "Completed" },
+        { where: { fk_candidate: id, status: { [Op.ne]: "Cancelled" } } }
+      );
+    }
+
+    return res.json({
+      message: "Candidate hired successfully",
+      candidate: cand,
+    });
+  } catch (error) {
+    console.error("Hire candidate error:", error);
+    return res.status(500).json({ error: "Failed to hire candidate" });
+  }
+};
+
 // Update candidate status
 exports.updateStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status: newStatus } = req.body;
 
-    const validStatuses = ["received", "selected", "validated", "Declined", "traited", "discarded"];
+    const validStatuses = ["received", "selected", "validated", "Declined", "traited", "discarded", "hired"];
     if (!validStatuses.includes(newStatus)) {
       return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(", ")}` });
     }

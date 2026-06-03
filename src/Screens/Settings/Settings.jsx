@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, CheckCircle2, Link2Off, Moon, Palette, Settings as SettingsIcon, Shield, Sun, Monitor, Sparkles } from 'lucide-react';
+import { CheckCircle2, Link2Off, Moon, Palette, Settings as SettingsIcon, Shield, Sun, Monitor, Sparkles } from 'lucide-react';
 import { FaLinkedinIn } from 'react-icons/fa';
 import { linkedinApi } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,7 +34,7 @@ export default function Settings() {
   const [linkedinStatus, setLinkedinStatus] = useState({ connected: false });
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [notifications, setNotifications] = useState({ apply: true, interview: true, aiDone: true, weekly: false });
+
 
   // Handle LinkedIn OAuth callback redirect
   useEffect(() => {
@@ -71,7 +71,6 @@ export default function Settings() {
   const tabs = [
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'general', label: 'General', icon: SettingsIcon },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'linkedin', label: 'LinkedIn', icon: FaLinkedinIn },
     { id: 'security', label: 'Security', icon: Shield },
   ];
@@ -227,31 +226,7 @@ export default function Settings() {
             </article>
           )}
 
-          {activeTab === 'notifications' && (
-            <article className="rounded-2xl surface-primary p-6">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">Notifications</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Control what updates you receive.</p>
-              <div className="mt-6 space-y-3">
-                {[
-                  ['apply', 'New candidate applications', 'Get notified when a candidate applies to your positions'],
-                  ['interview', 'Interview reminders', 'Reminders before scheduled interviews'],
-                  ['aiDone', 'AI scoring complete', 'When AI finishes analyzing and scoring candidates'],
-                  ['weekly', 'Weekly summary report', 'A digest of your hiring activity each week'],
-                ].map(([key, label, desc]) => (
-                  <div key={key} className="flex items-center justify-between rounded-xl p-3.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-all">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{desc}</p>
-                    </div>
-                    <Toggle
-                      enabled={notifications[key]}
-                      onClick={() => setNotifications((prev) => ({ ...prev, [key]: !prev[key] }))}
-                    />
-                  </div>
-                ))}
-              </div>
-            </article>
-          )}
+
 
           {activeTab === 'linkedin' && (
             <article className="rounded-2xl surface-primary p-6">

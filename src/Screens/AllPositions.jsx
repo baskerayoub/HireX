@@ -7,8 +7,81 @@ import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import {
-  Briefcase, Plus, Search, MapPin, Users, Building2, ArrowRight, GraduationCap, ArrowUpRight, Trash2, PowerOff, Power,
+  Briefcase, Plus, Search, MapPin, Users, Building2, ArrowRight, GraduationCap, Trash2, PencilLine, Save, X, Loader2,
 } from 'lucide-react';
+
+function splitTags(value) {
+  return String(value || '')
+    .split(',')
+    .map(tag => tag.trim())
+    .filter(Boolean);
+}
+
+function TagsInput({ value, onChange, placeholder }) {
+  const [draft, setDraft] = useState('');
+  const tags = splitTags(value);
+
+  const updateTags = (nextTags) => {
+    const uniqueTags = [];
+    nextTags.forEach(tag => {
+      const clean = tag.trim();
+      if (clean && !uniqueTags.some(existing => existing.toLowerCase() === clean.toLowerCase())) {
+        uniqueTags.push(clean);
+      }
+    });
+    onChange(uniqueTags.join(', '));
+  };
+
+  const addDraftTags = () => {
+    const next = splitTags(draft);
+    if (next.length === 0) return;
+    updateTags([...tags, ...next]);
+    setDraft('');
+  };
+
+  const removeTag = (tagToRemove) => {
+    updateTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addDraftTags();
+    }
+    if (e.key === 'Backspace' && !draft && tags.length > 0) {
+      updateTags(tags.slice(0, -1));
+    }
+  };
+
+  return (
+    <div className="min-h-[46px] w-full rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] px-3 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm shadow-slate-900/[0.02] transition focus-within:border-prpl focus-within:bg-white dark:focus-within:bg-white/[0.04] focus-within:ring-2 focus-within:ring-prpl/15">
+      <div className="flex min-h-[28px] flex-wrap items-center gap-2">
+        {tags.map(tag => (
+          <span key={tag} className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-prpl/8 px-2.5 text-xs font-semibold text-prpl shadow-sm shadow-prpl/[0.03] dark:border-prpl/20 dark:bg-prpl/15">
+            <span className="max-w-[180px] truncate">{tag}</span>
+            <button
+              type="button"
+              onClick={() => removeTag(tag)}
+              className="-mr-1 rounded-full p-0.5 text-prpl/60 transition hover:bg-prpl/12 hover:text-prpl focus:outline-none focus-visible:outline-none"
+              aria-label={`Remove ${tag}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        <input
+          type="text"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={addDraftTags}
+          onKeyDown={handleKeyDown}
+          placeholder={tags.length === 0 ? placeholder : 'Add skill'}
+          className="h-7 min-w-[150px] flex-1 bg-transparent px-1 text-sm outline-none ring-0 placeholder:text-slate-400 focus:outline-none focus:ring-0 focus-visible:outline-none dark:placeholder:text-slate-500"
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function AllPositions() {
   const [projects, setProjects] = useState([]);
@@ -20,6 +93,13 @@ export default function AllPositions() {
     projectId: '', title: '', location: '', typeContract: 'Full-time',
     yearsOfExperience: '', education: '', technicalSkills: '', description: '', mainMissions: '',
   });
+  // Edit state
+  const [editPosition, setEditPosition] = useState(null);
+  const [editForm, setEditForm] = useState({
+    title: '', location: '', typeContract: 'Full-time',
+    yearsOfExperience: '', education: '', technicalSkills: '', description: '',
+  });
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -57,7 +137,6 @@ export default function AllPositions() {
     );
   }, [allPositions, search]);
 
-  // Only allow creating positions in active projects
   const activeProjects = useMemo(() => projects.filter(p => p.status === 'Active'), [projects]);
 
   const handleCreate = async (e) => {
@@ -69,6 +148,7 @@ export default function AllPositions() {
       await profilesApi.create(projectId, payload);
       setShowCreate(false);
       setForm({ projectId: '', title: '', location: '', typeContract: 'Full-time', yearsOfExperience: '', education: '', technicalSkills: '', description: '', mainMissions: '' });
+      toast.success('Position created successfully');
       loadProjects();
     } catch (err) {
       console.error(err);
@@ -80,8 +160,7 @@ export default function AllPositions() {
     const ok = await confirm({
       title: 'Delete Position',
       message: `Delete "${title || 'Untitled'}"? This will remove the position and all associated data. This action cannot be undone.`,
-      confirmText: 'Delete',
-      variant: 'danger',
+      confirmText: 'Delete', variant: 'danger',
     });
     if (!ok) return;
     try {
@@ -92,6 +171,34 @@ export default function AllPositions() {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to delete position');
     }
+  };
+
+  const openEdit = (pos) => {
+    setEditPosition(pos);
+    setEditForm({
+      title: pos.title || '',
+      location: pos.location || '',
+      typeContract: pos.typeContract || 'Full-time',
+      yearsOfExperience: pos.yearsOfExperience || '',
+      education: pos.education || '',
+      technicalSkills: pos.technicalSkills || '',
+      description: pos.description || '',
+    });
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    if (!editForm.title.trim()) { toast.warning('Position title is required'); return; }
+    setSaving(true);
+    try {
+      await profilesApi.update(editPosition.id, editForm);
+      toast.success('Position updated successfully');
+      setEditPosition(null);
+      loadProjects();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to update position');
+    } finally { setSaving(false); }
   };
 
   if (loading) return <LoadingSpinner text="Loading positions..." />;
@@ -106,12 +213,9 @@ export default function AllPositions() {
           <h1 className="text-[1.85rem] font-bold text-slate-900 dark:text-slate-50 tracking-tight">Positions</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">All open positions across your recruitment projects.</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          disabled={activeProjects.length === 0}
+        <button onClick={() => setShowCreate(true)} disabled={activeProjects.length === 0}
           className="btn-magnetic inline-flex items-center gap-2 bg-gradient-to-r from-prpl to-purple-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow-[0_4px_16px_rgba(124,58,237,0.3)] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          title={activeProjects.length === 0 ? 'You need at least one active project to create a position' : ''}
-        >
+          title={activeProjects.length === 0 ? 'You need at least one active project to create a position' : ''}>
           <Plus className="w-4 h-4" /> New Position
         </button>
       </div>
@@ -151,11 +255,12 @@ export default function AllPositions() {
                     }`}>
                       {isProjectInactive ? 'Inactive' : (position.typeContract || 'Full-time')}
                     </span>
-                    <button
-                      onClick={() => handleDeletePosition(position.id, position.title)}
-                      title="Delete position"
-                      className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                    >
+                    <button onClick={() => openEdit(position)} title="Edit position"
+                      className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-prpl hover:bg-prpl/8 dark:hover:bg-prpl/12 transition-all opacity-0 group-hover:opacity-100">
+                      <PencilLine className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDeletePosition(position.id, position.title)} title="Delete position"
+                      className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -169,13 +274,10 @@ export default function AllPositions() {
                   {position.description || 'No description provided yet.'}
                 </p>
 
-                {/* Inactive banner */}
                 {isProjectInactive && (
                   <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200/50 dark:border-amber-500/15">
-                    <PowerOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
-                      Project is inactive — position disabled
-                    </p>
+                    <Briefcase className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">Project is inactive — position disabled</p>
                   </div>
                 )}
 
@@ -201,12 +303,8 @@ export default function AllPositions() {
                 <div className="flex gap-2">
                   {isProjectInactive ? (
                     <>
-                      <button disabled className="flex-1 text-center py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.03] text-slate-400 dark:text-slate-600 text-sm font-semibold cursor-not-allowed">
-                        Candidates
-                      </button>
-                      <button disabled className="flex-1 text-center py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.03] text-slate-400 dark:text-slate-600 text-sm font-semibold cursor-not-allowed border border-slate-200/50 dark:border-white/[0.04]">
-                        Publish
-                      </button>
+                      <button disabled className="flex-1 text-center py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.03] text-slate-400 dark:text-slate-600 text-sm font-semibold cursor-not-allowed">Candidates</button>
+                      <button disabled className="flex-1 text-center py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.03] text-slate-400 dark:text-slate-600 text-sm font-semibold cursor-not-allowed border border-slate-200/50 dark:border-white/[0.04]">Publish</button>
                     </>
                   ) : (
                     <>
@@ -246,7 +344,6 @@ export default function AllPositions() {
               <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className={inputClass} placeholder="e.g., Senior Frontend Engineer" required />
             </div>
           </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Location</label>
@@ -255,11 +352,10 @@ export default function AllPositions() {
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Contract Type</label>
               <select value={form.typeContract} onChange={e => setForm({ ...form, typeContract: e.target.value })} className={inputClass}>
-                <option>Full-time</option><option>Part-time</option><option>Contract</option><option>Internship</option><option>Freelance</option>
+                <option>Full-time</option><option>Contract</option>
               </select>
             </div>
           </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Years of Experience</label>
@@ -270,23 +366,75 @@ export default function AllPositions() {
               <input type="text" value={form.education} onChange={e => setForm({ ...form, education: e.target.value })} className={inputClass} placeholder="e.g., Bachelor's in CS" />
             </div>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Technical Skills</label>
-            <input type="text" value={form.technicalSkills} onChange={e => setForm({ ...form, technicalSkills: e.target.value })} className={inputClass} placeholder="e.g., React, TypeScript, Node.js" />
+            <TagsInput
+              value={form.technicalSkills}
+              onChange={technicalSkills => setForm({ ...form, technicalSkills })}
+              placeholder="e.g., React, TypeScript, Node.js"
+            />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Description</label>
             <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3}
               className="w-full px-4 py-3 rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-800 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
               placeholder="Brief overview of the position..." />
           </div>
-
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.04] rounded-xl transition">Cancel</button>
             <button type="submit" disabled={creating} className="btn-magnetic px-5 py-2.5 bg-gradient-to-r from-prpl to-purple-600 text-white text-sm font-semibold rounded-xl shadow-[0_4px_14px_rgba(124,58,237,0.3)] disabled:opacity-50 transition-all">
               {creating ? 'Creating...' : 'Create Position'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Position Modal */}
+      <Modal isOpen={!!editPosition} onClose={() => setEditPosition(null)} title="Edit Position" icon={PencilLine} size="lg">
+        <form onSubmit={handleEdit} className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Position Title <span className="text-red-500">*</span></label>
+              <input type="text" value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className={inputClass} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Location</label>
+              <input type="text" value={editForm.location} onChange={e => setEditForm({ ...editForm, location: e.target.value })} className={inputClass} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Contract Type</label>
+              <select value={editForm.typeContract} onChange={e => setEditForm({ ...editForm, typeContract: e.target.value })} className={inputClass}>
+                <option>Full-time</option><option>Part-time</option><option>Contract</option><option>Internship</option><option>Freelance</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Years of Experience</label>
+              <input type="number" value={editForm.yearsOfExperience} onChange={e => setEditForm({ ...editForm, yearsOfExperience: e.target.value })} className={inputClass} min="0" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Education</label>
+              <input type="text" value={editForm.education} onChange={e => setEditForm({ ...editForm, education: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Technical Skills</label>
+              <input type="text" value={editForm.technicalSkills} onChange={e => setEditForm({ ...editForm, technicalSkills: e.target.value })} className={inputClass} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Description</label>
+            <textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} rows={3}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-800 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+          </div>
+          <div className="flex justify-end gap-3 pt-1">
+            <button type="button" onClick={() => setEditPosition(null)} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.04] rounded-xl transition">
+              <X className="w-4 h-4" /> Cancel
+            </button>
+            <button type="submit" disabled={saving} className="btn-magnetic inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-prpl to-purple-600 text-white text-sm font-semibold rounded-xl shadow-[0_4px_14px_rgba(124,58,237,0.3)] disabled:opacity-50 transition-all">
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save Changes</>}
             </button>
           </div>
         </form>

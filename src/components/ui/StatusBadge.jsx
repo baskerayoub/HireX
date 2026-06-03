@@ -12,6 +12,8 @@ const statusConfig = {
   Cancelled: { label: 'Cancelled', bg: 'bg-red-500/8 dark:bg-red-500/12',         text: 'text-red-600 dark:text-red-400',         dot: 'bg-red-500' },
   Updated:   { label: 'Updated',   bg: 'bg-amber-500/8 dark:bg-amber-500/12',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
   Published: { label: 'Published', bg: 'bg-emerald-500/8 dark:bg-emerald-500/12', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  hired:     { label: 'Hired',     bg: 'bg-emerald-500/8 dark:bg-emerald-500/12', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  Inactive:  { label: 'Inactive',  bg: 'bg-amber-500/8 dark:bg-amber-500/12',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
 };
 
 export default function StatusBadge({ status }) {

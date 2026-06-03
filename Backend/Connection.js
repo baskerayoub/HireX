@@ -11,6 +11,7 @@ const candidateRoutes = require("./routes/candidateRoutes");
 const meetingRoutes = require("./routes/meetingRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const linkedinRoutes = require("./routes/linkedinRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +37,7 @@ app.use("/api/candidates", candidateRoutes);
 app.use("/api/meetings", meetingRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/linkedin", linkedinRoutes);
+app.use("/api/users", userRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

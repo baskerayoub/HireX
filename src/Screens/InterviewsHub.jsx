@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { meetingsApi } from '../api';
+import { meetingsApi, candidatesApi } from '../api';
 import Modal from '../components/ui/Modal';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../components/ui/ConfirmDialog';
@@ -159,29 +159,29 @@ function CalendarGrid({ meetings, selectedDate, onSelectDate, currentMonth, onCh
 }
 
 /* ── Interview Card ───────────────────────────── */
-function InterviewCard({ mtg, onCancel, onDelete, onView, index = 0 }) {
-  const isFuture = new Date(mtg.start_date) > new Date();
-  const isPast = new Date(mtg.end_date) < new Date();
-  const isLive =
-    new Date(mtg.start_date) <= new Date() && new Date(mtg.end_date) >= new Date();
+function InterviewCard({ mtg, onCancel, onDelete, onHire, index = 0 }) {
+  const now = new Date();
+  const isFuture = new Date(mtg.start_date) > now;
+  const isPast = new Date(mtg.end_date) < now;
+  const isLive = new Date(mtg.start_date) <= now && new Date(mtg.end_date) >= now;
 
   const formatDate = (d) =>
     new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const formatTime = (d) =>
     new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-  const statusColors = {
-    Created: 'border-l-blue-500',
-    Updated: 'border-l-cyan-500',
-    Cancelled: 'border-l-red-500',
-    Completed: 'border-l-emerald-500',
-  };
+  // Date-based left border: green = reached/past, yellow = upcoming, red = cancelled
+  const borderColor = mtg.status === 'Cancelled'
+    ? 'border-l-red-500'
+    : (isPast || isLive)
+      ? 'border-l-emerald-500'
+      : 'border-l-amber-400';
+
+  const isHired = mtg.Candidate?.status === 'hired';
 
   return (
     <div
-      className={`rounded-2xl surface-primary p-5 surface-hover animate-fade-in group border-l-[3px] ${
-        statusColors[mtg.status] || 'border-l-slate-300 dark:border-l-slate-600'
-      } ${isLive ? 'ring-1 ring-emerald-500/30 dark:ring-emerald-400/20' : ''}`}
+      className={`rounded-2xl surface-primary p-5 surface-hover animate-fade-in group border-l-[3px] ${borderColor} ${isLive ? 'ring-1 ring-emerald-500/30 dark:ring-emerald-400/20' : ''}`}
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="flex items-start justify-between gap-4">
@@ -192,6 +192,11 @@ function InterviewCard({ mtg, onCancel, onDelete, onView, index = 0 }) {
               {mtg.subject || 'Interview'}
             </h3>
             <StatusBadge status={mtg.status} />
+            {isHired && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                <CheckCircle2 className="w-2.5 h-2.5" /> HIRED
+              </span>
+            )}
             {isLive && (
               <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
                 <Play className="w-2.5 h-2.5" /> LIVE
@@ -199,6 +204,16 @@ function InterviewCard({ mtg, onCancel, onDelete, onView, index = 0 }) {
             )}
             {isFuture && mtg.status !== 'Cancelled' && (
               <CountdownTimer targetDate={mtg.start_date} />
+            )}
+            {/* Date status indicator */}
+            {mtg.status !== 'Cancelled' && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                (isPast || isLive)
+                  ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+              }`}>
+                {isPast ? 'Completed' : isLive ? 'In Progress' : 'Upcoming'}
+              </span>
             )}
           </div>
 
@@ -241,13 +256,9 @@ function InterviewCard({ mtg, onCancel, onDelete, onView, index = 0 }) {
 
           {/* Email status */}
           {mtg.status_message && (
-            <p
-              className={`text-[11px] mt-2 flex items-center gap-1.5 ${
-                mtg.status_message.includes('failed')
-                  ? 'text-red-500'
-                  : 'text-emerald-600 dark:text-emerald-400'
-              }`}
-            >
+            <p className={`text-[11px] mt-2 flex items-center gap-1.5 ${
+                mtg.status_message.includes('failed') ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'
+              }`}>
               <Mail className="w-3 h-3" />
               {mtg.status_message}
             </p>
@@ -256,31 +267,33 @@ function InterviewCard({ mtg, onCancel, onDelete, onView, index = 0 }) {
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          {mtg.link && (
-            <a
-              href={mtg.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-magnetic p-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition"
-              title="Join meeting"
+          {/* Hire button — show on past/live interviews for non-hired candidates */}
+          {(isPast || isLive) && mtg.status !== 'Cancelled' && !isHired && mtg.Candidate?.id && (
+            <button
+              onClick={() => onHire?.(mtg.Candidate)}
+              className="btn-magnetic p-2 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition"
+              title="Hire candidate"
             >
+              <CheckCircle2 className="w-4 h-4" />
+            </button>
+          )}
+          {mtg.link && (
+            <a href={mtg.link} target="_blank" rel="noopener noreferrer"
+              className="btn-magnetic p-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition"
+              title="Join meeting">
               <Video className="w-4 h-4" />
             </a>
           )}
           {mtg.status !== 'Cancelled' && isFuture && (
-            <button
-              onClick={() => onCancel?.(mtg.id)}
+            <button onClick={() => onCancel?.(mtg.id)}
               className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 hover:text-amber-500 transition"
-              title="Cancel interview"
-            >
+              title="Cancel interview">
               <X className="w-4 h-4" />
             </button>
           )}
-          <button
-            onClick={() => onDelete?.(mtg.id)}
+          <button onClick={() => onDelete?.(mtg.id)}
             className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition"
-            title="Delete interview"
-          >
+            title="Delete interview">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
@@ -402,6 +415,24 @@ export default function InterviewsHub() {
       d.setMonth(d.getMonth() + delta);
       return d;
     });
+  };
+
+  const handleHire = async (candidate) => {
+    const ok = await confirm({
+      title: 'Hire Candidate',
+      message: `Hire "${candidate.name || 'this candidate'}"? This will mark them as hired and complete all associated interviews.`,
+      confirmText: 'Confirm Hire',
+      variant: 'info',
+    });
+    if (!ok) return;
+    try {
+      await candidatesApi.hire(candidate.id);
+      toast.success(`${candidate.name || 'Candidate'} has been hired! 🎉`);
+      load();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to hire candidate');
+    }
   };
 
   // Derived data
@@ -589,6 +620,7 @@ export default function InterviewsHub() {
                   mtg={mtg}
                   onCancel={handleCancel}
                   onDelete={handleDelete}
+                  onHire={handleHire}
                   index={i}
                 />
               ))}

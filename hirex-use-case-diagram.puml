@@ -1,0 +1,79 @@
+@startuml HireX_Use_Case_Diagram
+title HireX - Improved Use Case Diagram
+
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor Recruiter
+actor Candidate
+actor Admin
+
+rectangle "HireX Platform" {
+  usecase "Login / Register" as UC_Auth
+  usecase "Manage Profile" as UC_Profile
+
+  usecase "Create Project" as UC_CreateProject
+  usecase "Create Job Offer" as UC_CreateJob
+  usecase "Generate Job Description\nwith AI" as UC_GenerateDesc
+  usecase "Publish Job" as UC_PublishJob
+  usecase "Publish to LinkedIn" as UC_LinkedIn
+
+  usecase "View Candidates" as UC_ViewCandidates
+  usecase "Analyze CV with AI" as UC_AnalyzeCV
+  usecase "Shortlist Candidate" as UC_Shortlist
+  usecase "Schedule Interview" as UC_ScheduleInterview
+  usecase "Send Interview Invitation" as UC_SendInvitation
+  usecase "Add Interview Feedback" as UC_Feedback
+
+  usecase "Generate Contract" as UC_GenerateContract
+  usecase "Use Contract Template" as UC_Template
+
+  usecase "View Analytics" as UC_Analytics
+  usecase "Ask AI Assistant" as UC_AIAssistant
+
+  usecase "Apply for Job" as UC_Apply
+  usecase "Upload CV" as UC_UploadCV
+  usecase "Track Application Status" as UC_TrackStatus
+
+  usecase "Manage Users" as UC_ManageUsers
+}
+
+' Actors
+Recruiter --> UC_Auth
+Recruiter --> UC_Profile
+Recruiter --> UC_CreateProject
+Recruiter --> UC_CreateJob
+Recruiter --> UC_PublishJob
+Recruiter --> UC_ViewCandidates
+Recruiter --> UC_Shortlist
+Recruiter --> UC_ScheduleInterview
+Recruiter --> UC_Feedback
+Recruiter --> UC_GenerateContract
+Recruiter --> UC_Analytics
+Recruiter --> UC_AIAssistant
+
+Candidate --> UC_Auth
+Candidate --> UC_Profile
+Candidate --> UC_Apply
+Candidate --> UC_UploadCV
+Candidate --> UC_TrackStatus
+
+Admin --> UC_Auth
+Admin --> UC_ManageUsers
+Admin --> UC_Analytics
+
+' Include relationships
+UC_CreateJob ..> UC_GenerateDesc : <<include>>
+UC_PublishJob ..> UC_LinkedIn : <<include>>
+UC_ViewCandidates ..> UC_AnalyzeCV : <<include>>
+UC_ScheduleInterview ..> UC_SendInvitation : <<include>>
+UC_GenerateContract ..> UC_Template : <<include>>
+UC_Apply ..> UC_UploadCV : <<include>>
+
+' Optional / extended behavior
+UC_AnalyzeCV ..> UC_Shortlist : <<extend>>
+UC_ScheduleInterview ..> UC_Feedback : <<extend>>
+
+@enduml

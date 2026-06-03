@@ -401,10 +401,141 @@ exports.chat = async (req, res) => {
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "Messages array is required" });
     }
-    const reply = await aiService.chat(messages);
+
+    // Build user context from authenticated user
+    const userContext = {};
+    if (req.user) {
+      const { users: UsersModel, project, candidate: CandidateModel, meeting, profile: ProfileModel } = require("../models");
+      
+      try {
+        const user = await UsersModel.findByPk(req.user.id, {
+          attributes: ["id", "firstName", "lastName", "email", "role"],
+        });
+        if (user) {
+          userContext.name = [user.firstName, user.lastName].filter(Boolean).join(" ");
+          userContext.email = user.email;
+          userContext.role = user.role;
+        }
+
+        // Gather live platform stats for richer AI context
+        const [projectCount, candidateCount, interviewCount, positionCount] = await Promise.all([
+          project ? project.count({ where: { fk_user: req.user.id, status: "Active" } }).catch(() => 0) : 0,
+          CandidateModel ? CandidateModel.count().catch(() => 0) : 0,
+          meeting ? meeting.count({ where: { fk_user: req.user.id } }).catch(() => 0) : 0,
+          ProfileModel ? ProfileModel.count().catch(() => 0) : 0,
+        ]);
+
+        userContext.stats = {
+          projects: projectCount,
+          candidates: candidateCount,
+          interviews: interviewCount,
+          positions: positionCount,
+        };
+      } catch (ctxErr) {
+        console.warn("Could not build user context for chat:", ctxErr.message);
+      }
+    }
+
+    const reply = await aiService.chat(messages, userContext);
     return res.json({ reply });
   } catch (error) {
     console.error("AI Chat error:", error);
     return res.status(500).json({ error: error.message || "Chat failed" });
+  }
+};
+
+/* ══════════════════════════════════════════════
+   ██  CHAT CONVERSATION PERSISTENCE  ██
+   CRUD for saved chat conversations.
+   ══════════════════════════════════════════════ */
+
+exports.listConversations = async (req, res) => {
+  try {
+    const { chat_conversation } = require("../models");
+    if (!chat_conversation) return res.json([]);
+
+    const conversations = await chat_conversation.findAll({
+      where: { fk_user: req.user.id, is_archived: false },
+      order: [["updatedAt", "DESC"]],
+      attributes: ["id", "title", "createdAt", "updatedAt"],
+    });
+    return res.json(conversations);
+  } catch (error) {
+    console.error("List conversations error:", error);
+    return res.status(500).json({ error: "Failed to load conversations" });
+  }
+};
+
+exports.getConversation = async (req, res) => {
+  try {
+    const { chat_conversation } = require("../models");
+    if (!chat_conversation) return res.status(404).json({ error: "Not found" });
+
+    const conv = await chat_conversation.findOne({
+      where: { id: req.params.id, fk_user: req.user.id },
+    });
+    if (!conv) return res.status(404).json({ error: "Conversation not found" });
+
+    return res.json({
+      id: conv.id,
+      title: conv.title,
+      messages: JSON.parse(conv.messages || "[]"),
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+    });
+  } catch (error) {
+    console.error("Get conversation error:", error);
+    return res.status(500).json({ error: "Failed to load conversation" });
+  }
+};
+
+exports.saveConversation = async (req, res) => {
+  try {
+    const { chat_conversation } = require("../models");
+    if (!chat_conversation) return res.status(500).json({ error: "Chat model not available" });
+
+    const { id, title, messages } = req.body;
+
+    if (id) {
+      // Update existing
+      const conv = await chat_conversation.findOne({
+        where: { id, fk_user: req.user.id },
+      });
+      if (!conv) return res.status(404).json({ error: "Conversation not found" });
+
+      await conv.update({
+        title: title || conv.title,
+        messages: JSON.stringify(messages || []),
+      });
+      return res.json({ id: conv.id, title: conv.title, updatedAt: conv.updatedAt });
+    } else {
+      // Create new
+      const conv = await chat_conversation.create({
+        fk_user: req.user.id,
+        title: title || "New conversation",
+        messages: JSON.stringify(messages || []),
+      });
+      return res.json({ id: conv.id, title: conv.title, createdAt: conv.createdAt });
+    }
+  } catch (error) {
+    console.error("Save conversation error:", error);
+    return res.status(500).json({ error: "Failed to save conversation" });
+  }
+};
+
+exports.deleteConversation = async (req, res) => {
+  try {
+    const { chat_conversation } = require("../models");
+    if (!chat_conversation) return res.status(404).json({ error: "Not found" });
+
+    const deleted = await chat_conversation.destroy({
+      where: { id: req.params.id, fk_user: req.user.id },
+    });
+    if (!deleted) return res.status(404).json({ error: "Conversation not found" });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Delete conversation error:", error);
+    return res.status(500).json({ error: "Failed to delete conversation" });
   }
 };

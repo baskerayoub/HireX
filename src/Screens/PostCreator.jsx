@@ -18,9 +18,55 @@ import {
   RefreshCw,
   X,
   ExternalLink,
-  PartyPopper,
+  UserCircle,
+  Smile,
+  Clock3,
+  Tag,
+  MapPin,
+  Hash,
 } from 'lucide-react';
 import { FaLinkedinIn } from 'react-icons/fa';
+
+function LinkedInAvatar({ src, size = 'md' }) {
+  const [failed, setFailed] = useState(false);
+  const imageSize = size === 'sm' ? 'w-8 h-8' : 'w-9 h-9';
+  const iconSize = size === 'sm' ? 'w-5 h-5' : 'w-6 h-6';
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        onError={() => setFailed(true)}
+        className={`${imageSize} rounded-full object-cover ${size === 'sm' ? '' : 'ring-2 ring-white dark:ring-slate-800 shadow-sm'}`}
+      />
+    );
+  }
+
+  return (
+    <div className={`${imageSize} rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center ${size === 'sm' ? '' : 'ring-2 ring-white dark:ring-slate-800 shadow-sm'}`}>
+      <UserCircle className={iconSize} />
+    </div>
+  );
+}
+
+function stripEmojis(text) {
+  return String(text || '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\uFE0E\uFE0F]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function stripHashtags(text) {
+  return String(text || '')
+    .replace(/(^|\s)#[\p{L}\p{N}_-]+/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 export default function PostCreator() {
   const { projectId: routeProjectId } = useParams();
@@ -35,6 +81,8 @@ export default function PostCreator() {
   const [selectedProfileId, setSelectedProfileId] = useState(preselectedProfile || '');
 
   const [postBody, setPostBody] = useState('');
+  const [includeEmojis, setIncludeEmojis] = useState(true);
+  const [includeHashtags, setIncludeHashtags] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -96,8 +144,13 @@ export default function PostCreator() {
         softSkills: selectedProfile.softSkills,
         mainMissions: selectedProfile.mainMissions,
         description: selectedProfile.description,
+        includeEmojis,
+        includeHashtags,
       });
-      setPostBody(res.data?.content || '');
+      let content = res.data?.content || '';
+      if (!includeEmojis) content = stripEmojis(content);
+      if (!includeHashtags) content = stripHashtags(content);
+      setPostBody(content);
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to generate post.');
@@ -113,7 +166,7 @@ export default function PostCreator() {
     setError('');
     try {
       const res = await linkedinApi.publish({
-        text: postBody + (applyLink ? `\n\n👉 Apply: ${applyLink}` : ''),
+        text: postBody + (applyLink ? `\n\nApply: ${applyLink}` : ''),
         profileId: selectedProfileId || undefined,
         applyLink: applyLink || undefined,
       });
@@ -209,13 +262,25 @@ export default function PostCreator() {
             {/* Position details chips */}
             {selectedProfile && (
               <div className="mt-4 pt-4 border-t border-slate-200/40 dark:border-white/[0.04] flex flex-wrap gap-2">
-                <span className="px-2.5 py-1 bg-prpl/8 dark:bg-prpl/12 text-prpl text-xs rounded-full font-medium">📍 {selectedProfile.location || 'Remote'}</span>
-                <span className="px-2.5 py-1 bg-blue-500/8 dark:bg-blue-500/12 text-blue-600 dark:text-blue-400 text-xs rounded-full font-medium">💼 {selectedProfile.yearsOfExperience || '0'}+ yrs</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-prpl/8 dark:bg-prpl/12 text-prpl text-xs rounded-full font-medium">
+                  <MapPin className="w-3 h-3" />
+                  {selectedProfile.location || 'Remote'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/8 dark:bg-blue-500/12 text-blue-600 dark:text-blue-400 text-xs rounded-full font-medium">
+                  <Clock3 className="w-3 h-3" />
+                  {selectedProfile.yearsOfExperience || '0'}+ yrs
+                </span>
                 {selectedProfile.typeContract && (
-                  <span className="px-2.5 py-1 bg-emerald-500/8 dark:bg-emerald-500/12 text-emerald-600 dark:text-emerald-400 text-xs rounded-full font-medium">📄 {selectedProfile.typeContract}</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/8 dark:bg-emerald-500/12 text-emerald-600 dark:text-emerald-400 text-xs rounded-full font-medium">
+                    <FileText className="w-3 h-3" />
+                    {selectedProfile.typeContract}
+                  </span>
                 )}
                 {selectedProfile.technicalSkills?.split(',').slice(0, 4).map((s, i) => (
-                  <span key={i} className="px-2.5 py-1 bg-slate-50/80 dark:bg-white/[0.04] text-slate-600 dark:text-slate-300 text-xs rounded-full border border-slate-200/40 dark:border-white/[0.04]">{s.trim()}</span>
+                  <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50/80 dark:bg-white/[0.04] text-slate-600 dark:text-slate-300 text-xs rounded-full border border-slate-200/40 dark:border-white/[0.04]">
+                    <Tag className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                    {s.trim()}
+                  </span>
                 ))}
               </div>
             )}
@@ -228,14 +293,68 @@ export default function PostCreator() {
                 <span className="w-6 h-6 rounded-full bg-prpl/10 dark:bg-prpl/20 text-prpl text-[11px] font-bold flex items-center justify-center">2</span>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Compose your post</h3>
               </div>
-              <button
-                onClick={handleGenerate}
-                disabled={!selectedProfile || generating}
-                className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-prpl to-purple-600 text-white text-xs font-semibold rounded-xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(124,58,237,0.3)]"
-              >
-                {generating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                {generating ? 'Generating...' : 'Generate with AI'}
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIncludeEmojis(v => !v)}
+                  aria-pressed={includeEmojis}
+                  className={`inline-flex h-9 items-center gap-2 rounded-xl border px-2.5 text-xs font-semibold transition-all ${
+                    includeEmojis
+                      ? 'border-prpl/25 bg-prpl/10 text-prpl shadow-[0_4px_14px_rgba(124,58,237,0.12)] dark:bg-prpl/15'
+                      : 'border-slate-200/70 bg-white/70 text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-lg transition ${
+                    includeEmojis
+                      ? 'bg-prpl text-white'
+                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                  }`}>
+                    <Smile className="h-3.5 w-3.5" />
+                  </span>
+                  <span>Emojis</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] uppercase leading-none transition ${
+                    includeEmojis
+                      ? 'bg-white/80 text-prpl dark:bg-white/10'
+                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                  }`}>
+                    {includeEmojis ? 'On' : 'Off'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIncludeHashtags(v => !v)}
+                  aria-pressed={includeHashtags}
+                  className={`inline-flex h-9 items-center gap-2 rounded-xl border px-2.5 text-xs font-semibold transition-all ${
+                    includeHashtags
+                      ? 'border-prpl/25 bg-prpl/10 text-prpl shadow-[0_4px_14px_rgba(124,58,237,0.12)] dark:bg-prpl/15'
+                      : 'border-slate-200/70 bg-white/70 text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-lg transition ${
+                    includeHashtags
+                      ? 'bg-prpl text-white'
+                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                  }`}>
+                    <Hash className="h-3.5 w-3.5" />
+                  </span>
+                  <span>Hashtags</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] uppercase leading-none transition ${
+                    includeHashtags
+                      ? 'bg-white/80 text-prpl dark:bg-white/10'
+                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                  }`}>
+                    {includeHashtags ? 'On' : 'Off'}
+                  </span>
+                </button>
+                <button
+                  onClick={handleGenerate}
+                  disabled={!selectedProfile || generating}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-prpl to-purple-600 text-white text-xs font-semibold rounded-xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(124,58,237,0.3)]"
+                >
+                  {generating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  {generating ? 'Generating...' : 'Generate with AI'}
+                </button>
+              </div>
             </div>
 
             {generating && (
@@ -300,13 +419,7 @@ export default function PostCreator() {
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4">Preview</h3>
             <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-4">
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-200 dark:border-slate-700">
-                {linkedinStatus?.picture ? (
-                  <img src={linkedinStatus.picture} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-sm" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-[#0077B5] text-white flex items-center justify-center">
-                    <FaLinkedinIn className="w-3.5 h-3.5" />
-                  </div>
-                )}
+                <LinkedInAvatar src={linkedinStatus?.picture} />
                 <div>
                   <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{linkedinStatus?.name || 'Your Profile'}</p>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500">Just now · <FaLinkedinIn className="w-2.5 h-2.5 inline -mt-px" /> LinkedIn</p>
@@ -416,13 +529,7 @@ export default function PostCreator() {
               {/* Mini preview */}
               <div className="rounded-xl border border-slate-200/60 dark:border-white/[0.06] bg-slate-50/80 dark:bg-white/[0.02] p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  {linkedinStatus?.picture ? (
-                    <img src={linkedinStatus.picture} alt="" className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-[#0077B5] text-white flex items-center justify-center">
-                      <FaLinkedinIn className="w-3 h-3" />
-                    </div>
-                  )}
+                  <LinkedInAvatar src={linkedinStatus?.picture} size="sm" />
                   <div>
                     <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{linkedinStatus?.name || 'Your Profile'}</p>
                     <p className="text-[10px] text-slate-400 dark:text-slate-500">Just now</p>

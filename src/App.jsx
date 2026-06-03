@@ -41,6 +41,16 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'Admin') return <Navigate to="/unauthorized" replace />;
+
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -76,7 +86,7 @@ export default function App() {
             <Route path="/projects/:projectId/contracts" element={<Contracts />} />
 
             {/* Admin */}
-            <Route path="/users" element={<Users />} />
+            <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>

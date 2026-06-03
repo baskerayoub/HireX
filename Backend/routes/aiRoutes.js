@@ -23,4 +23,10 @@ router.post("/generate-post", aiController.generatePost);
 // AI Chat assistant (HireX-scoped)
 router.post("/chat", aiController.chat);
 
+// Chat conversation persistence (history sidebar)
+router.get("/conversations", aiController.listConversations);
+router.get("/conversations/:id", aiController.getConversation);
+router.post("/conversations", aiController.saveConversation);
+router.delete("/conversations/:id", aiController.deleteConversation);
+
 module.exports = router;

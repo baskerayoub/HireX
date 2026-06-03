@@ -74,7 +74,7 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'received',
       validate: {
         isIn: {
-          args: [['received', 'selected', 'validated', 'Declined', 'traited', 'discarded']],
+          args: [['received', 'selected', 'validated', 'Declined', 'traited', 'discarded', 'hired']],
           msg: 'Invalid status'
         }
       }

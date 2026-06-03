@@ -51,7 +51,7 @@ export function DropdownItem({ children, icon: Icon, onClick, danger = false }) 
 }
 
 export function DropdownDivider() {
-  return <div className="my-1 h-px bg-slate-200/40 dark:bg-white/[0.04]" />;
+  return <div className="my-1 h-px bg-slate-200/20 dark:bg-white/[0.04]" />;
 }
 
 export function DropdownHeader({ children }) {

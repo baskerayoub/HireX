@@ -1,11 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { aiApi } from '../api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Bot,
   Send,
   Sparkles,
   User,
-  Search,
   ArrowRight,
   Lightbulb,
   Users,
@@ -15,66 +17,113 @@ import {
   Copy,
   Check,
   RotateCcw,
-  AlertCircle,
+  MessageSquarePlus,
+  History,
+  Trash2,
+  ChevronLeft,
+  X,
+  PanelLeftOpen,
+  PanelLeftClose,
+  BrainCircuit,
+  Briefcase,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 
+/* ── Suggestion Chips ──────────────────────── */
 const suggestions = [
-  { label: 'Best frontend candidates', icon: Users, prompt: 'Who is the best frontend candidate?' },
-  { label: 'How to rank CVs', icon: Target, prompt: 'How do I use AI to rank candidate CVs?' },
-  { label: 'Create a job post', icon: Sparkles, prompt: 'How can I create and publish a job post on LinkedIn?' },
-  { label: 'Interview tips', icon: FileText, prompt: 'What are best practices for conducting interviews?' },
+  { label: 'Top candidates overview', icon: Users, prompt: 'Give me an overview of my top candidates and their scores.' },
+  { label: 'AI CV ranking explained', icon: Target, prompt: 'How does the AI CV ranking system work in HireX?' },
+  { label: 'Publish on LinkedIn', icon: Briefcase, prompt: 'How can I create and publish a job post on LinkedIn from HireX?' },
+  { label: 'Interview best practices', icon: Calendar, prompt: 'What are best practices for scheduling and conducting interviews in HireX?' },
+  { label: 'Analytics dashboard', icon: BarChart3, prompt: 'How can I use the Analytics dashboard to improve my recruitment pipeline?' },
+  { label: 'Platform quick start', icon: BrainCircuit, prompt: 'Give me a quick-start guide on using HireX as a recruiter.' },
 ];
 
+/* ── Typing Indicator ──────────────────────── */
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-1.5 px-4 py-3">
-      <div className="w-2 h-2 rounded-full bg-prpl/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-      <div className="w-2 h-2 rounded-full bg-prpl/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-      <div className="w-2 h-2 rounded-full bg-prpl/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+    <div className="ai-typing-indicator">
+      <div className="ai-typing-dot" style={{ animationDelay: '0ms' }} />
+      <div className="ai-typing-dot" style={{ animationDelay: '150ms' }} />
+      <div className="ai-typing-dot" style={{ animationDelay: '300ms' }} />
     </div>
   );
 }
 
-function MessageBubble({ message, onCopy }) {
+/* ── Markdown Renderer ─────────────────────── */
+function MarkdownContent({ content }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="ai-md-p">{children}</p>,
+        strong: ({ children }) => <strong className="ai-md-strong">{children}</strong>,
+        em: ({ children }) => <em className="ai-md-em">{children}</em>,
+        ul: ({ children }) => <ul className="ai-md-ul">{children}</ul>,
+        ol: ({ children }) => <ol className="ai-md-ol">{children}</ol>,
+        li: ({ children }) => <li className="ai-md-li">{children}</li>,
+        h1: ({ children }) => <h3 className="ai-md-h">{children}</h3>,
+        h2: ({ children }) => <h3 className="ai-md-h">{children}</h3>,
+        h3: ({ children }) => <h3 className="ai-md-h">{children}</h3>,
+        code: ({ inline, className, children }) => {
+          if (inline) return <code className="ai-md-code-inline">{children}</code>;
+          return (
+            <div className="ai-md-code-block">
+              <pre><code className={className}>{children}</code></pre>
+            </div>
+          );
+        },
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="ai-md-link">{children}</a>
+        ),
+        blockquote: ({ children }) => <blockquote className="ai-md-blockquote">{children}</blockquote>,
+        table: ({ children }) => (
+          <div className="ai-md-table-wrap"><table className="ai-md-table">{children}</table></div>
+        ),
+        th: ({ children }) => <th className="ai-md-th">{children}</th>,
+        td: ({ children }) => <td className="ai-md-td">{children}</td>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+/* ── Message Bubble ────────────────────────── */
+function MessageBubble({ message }) {
   const [copied, setCopied] = useState(false);
+  const isAI = message.role === 'assistant';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
-    onCopy?.();
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isAI = message.role === 'assistant';
-
   return (
-    <div className={`flex gap-3 animate-fade-in ${isAI ? '' : 'flex-row-reverse'}`}>
-      <div className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center ${
-        isAI
-          ? 'bg-gradient-to-br from-prpl to-purple-600 shadow-[0_2px_8px_rgba(124,58,237,0.25)]'
-          : 'bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600'
-      }`}>
-        {isAI ? <Bot className="w-4 h-4 text-white" /> : <User className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
+    <div className={`ai-message-row ${isAI ? 'ai-message-row--ai' : 'ai-message-row--user'}`}>
+      {/* Avatar */}
+      <div className={`ai-avatar ${isAI ? 'ai-avatar--bot' : 'ai-avatar--user'}`}>
+        {isAI ? <Bot className="w-4 h-4 text-white" /> : <User className="w-4 h-4" />}
       </div>
-      <div className={`max-w-[80%] ${isAI ? '' : 'text-right'}`}>
-        <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-          isAI
-            ? 'surface-primary text-slate-700 dark:text-slate-200'
-            : 'bg-prpl text-white'
-        }`}>
-          {message.content.split('\n').map((line, i) => {
-            const bold = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            return <p key={i} className={i > 0 ? 'mt-1.5' : ''} dangerouslySetInnerHTML={{ __html: bold || '&nbsp;' }} />;
-          })}
+
+      {/* Content */}
+      <div className="ai-message-content">
+        <div className={`ai-bubble ${isAI ? 'ai-bubble--ai' : 'ai-bubble--user'}`}>
+          {isAI ? (
+            <MarkdownContent content={message.content} />
+          ) : (
+            <p className="ai-user-text">{message.content}</p>
+          )}
         </div>
+
+        {/* Actions (AI only) */}
         {isAI && (
-          <div className="flex items-center gap-2 mt-1.5">
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 hover:text-prpl transition"
-            >
+          <div className="ai-message-actions">
+            <button onClick={handleCopy} className="ai-action-btn">
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-              {copied ? 'Copied' : 'Copy'}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         )}
@@ -83,18 +132,125 @@ function MessageBubble({ message, onCopy }) {
   );
 }
 
+/* ── Skeleton Loader ───────────────────────── */
+function ThinkingSkeleton() {
+  return (
+    <div className="ai-message-row ai-message-row--ai">
+      <div className="ai-avatar ai-avatar--bot">
+        <Bot className="w-4 h-4 text-white" />
+      </div>
+      <div className="ai-message-content">
+        <div className="ai-bubble ai-bubble--ai">
+          <div className="ai-thinking">
+            <div className="ai-thinking-label">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>HireX AI is thinking...</span>
+            </div>
+            <TypingIndicator />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Conversation History Item ─────────────── */
+function getAiErrorMessage(err) {
+  if (err.response?.status === 404) {
+    return 'AI endpoint was not found. Make sure the backend server is running and updated, then try again.';
+  }
+  return err.response?.data?.error || 'Failed to get a response. Please try again.';
+}
+
+function ConversationItem({ conv, isActive, onSelect, onDelete }) {
+  const [showDelete, setShowDelete] = useState(false);
+
+  return (
+    <button
+      onClick={() => onSelect(conv.id)}
+      onMouseEnter={() => setShowDelete(true)}
+      onMouseLeave={() => setShowDelete(false)}
+      className={`ai-conv-item ${isActive ? 'ai-conv-item--active' : ''}`}
+    >
+      <MessageSquarePlus className="w-4 h-4 shrink-0 opacity-50" />
+      <span className="ai-conv-title">{conv.title}</span>
+      {showDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
+          className="ai-conv-delete"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </button>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   ██  MAIN AI ASSISTANT COMPONENT  ██
+   ═══════════════════════════════════════════════ */
 export default function AIAssistant() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [activeConvId, setActiveConvId] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
+  const textareaRef = useRef(null);
+  const saveTimerRef = useRef(null);
 
+  /* ── Auto scroll to bottom ── */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  /* ── Load conversation list ── */
+  const loadConversations = useCallback(async () => {
+    try {
+      const res = await aiApi.listConversations();
+      setConversations(res.data || []);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  /* ── Auto-resize textarea ── */
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
+    }
+  }, [input]);
+
+  /* ── Auto-save conversation (debounced) ── */
+  const autoSave = useCallback(async (msgs, convId) => {
+    if (msgs.length === 0) return;
+    try {
+      // Generate title from first user message
+      const firstUserMsg = msgs.find(m => m.role === 'user');
+      const title = firstUserMsg ? firstUserMsg.content.substring(0, 60) + (firstUserMsg.content.length > 60 ? '...' : '') : 'New conversation';
+
+      const res = await aiApi.saveConversation({
+        id: convId || undefined,
+        title,
+        messages: msgs,
+      });
+
+      if (res.data?.id && !convId) {
+        setActiveConvId(res.data.id);
+      }
+      loadConversations();
+    } catch { /* silent */ }
+  }, [loadConversations]);
+
+  /* ── Send message ── */
   const sendMessage = async (text) => {
     const query = text || input.trim();
     if (!query || isTyping) return;
@@ -106,20 +262,30 @@ export default function AIAssistant() {
     setIsTyping(true);
     setError('');
 
+    // Reset textarea height
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
     try {
       const res = await aiApi.chat(updatedMessages);
       const reply = res.data?.reply || "I couldn't process that. Please try again.";
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      const finalMessages = [...updatedMessages, { role: 'assistant', content: reply }];
+      setMessages(finalMessages);
+
+      // Debounced auto-save
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => autoSave(finalMessages, activeConvId), 1000);
     } catch (err) {
       console.error('AI Chat error:', err);
-      const errMsg = err.response?.data?.error || 'Failed to get a response. Please try again.';
+      const errMsg = getAiErrorMessage(err);
       setError(errMsg);
       setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${errMsg}` }]);
     } finally {
       setIsTyping(false);
+      inputRef.current?.focus();
     }
   };
 
+  /* ── Handle keyboard ── */
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -127,124 +293,194 @@ export default function AIAssistant() {
     }
   };
 
-  const clearChat = () => {
+  /* ── New chat ── */
+  const startNewChat = () => {
     setMessages([]);
+    setActiveConvId(null);
     setError('');
+    setSidebarOpen(false);
     inputRef.current?.focus();
   };
 
+  /* ── Load conversation ── */
+  const loadConversation = async (id) => {
+    setLoadingHistory(true);
+    try {
+      const res = await aiApi.getConversation(id);
+      setMessages(res.data?.messages || []);
+      setActiveConvId(id);
+      setError('');
+      setSidebarOpen(false);
+    } catch {
+      setError('Failed to load conversation');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  /* ── Delete conversation ── */
+  const deleteConversation = async (id) => {
+    try {
+      await aiApi.deleteConversation(id);
+      if (activeConvId === id) {
+        setMessages([]);
+        setActiveConvId(null);
+      }
+      loadConversations();
+    } catch { /* silent */ }
+  };
+
+  const greeting = user?.firstName ? `Welcome back, ${user.firstName}` : 'Welcome back';
+
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-prpl to-purple-600 flex items-center justify-center shadow-[0_4px_12px_rgba(124,58,237,0.3)]">
-              <Bot className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">AI Assistant</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Powered by AI · Recruitment only
-              </p>
-            </div>
-          </div>
-        </div>
-        {messages.length > 0 && (
-          <button
-            onClick={clearChat}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.04] transition"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Clear
+    <div className="ai-chat-container">
+      {/* ── Sidebar Overlay (mobile) ── */}
+      {sidebarOpen && (
+        <div className="ai-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* ── Sidebar ── */}
+      <aside className={`ai-sidebar ${sidebarOpen ? 'ai-sidebar--open' : ''}`}>
+        <div className="ai-sidebar-header">
+          <h3 className="ai-sidebar-title">
+            <History className="w-4 h-4" />
+            Chat History
+          </h3>
+          <button onClick={() => setSidebarOpen(false)} className="ai-sidebar-close">
+            <X className="w-4 h-4" />
           </button>
-        )}
-      </div>
+        </div>
 
-      {/* Chat area */}
-      <div className="flex-1 overflow-y-auto rounded-2xl surface-primary p-6">
-        {messages.length === 0 ? (
-          /* Empty state */
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-prpl/10 to-accent/10 dark:from-prpl/15 dark:to-accent/15 flex items-center justify-center mb-5 animate-pulse-glow">
-              <Sparkles className="w-7 h-7 text-prpl" />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
-              Your HireX Recruitment Assistant
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mb-8">
-              Ask me about candidates, interviews, job posts, CV analysis, and any HireX recruitment features.
-            </p>
+        <button onClick={startNewChat} className="ai-new-chat-btn">
+          <MessageSquarePlus className="w-4 h-4" />
+          New Conversation
+        </button>
 
-            {/* Suggestion chips */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
-              {suggestions.map((s) => (
-                <button
-                  key={s.label}
-                  onClick={() => sendMessage(s.prompt)}
-                  className="group flex items-center gap-3 rounded-xl surface-elevated p-3.5 text-left hover:border-prpl/20 dark:hover:border-prpl/15 transition-all"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-prpl/8 dark:bg-prpl/15 flex items-center justify-center shrink-0 group-hover:bg-prpl/15 dark:group-hover:bg-prpl/25 transition">
-                    <s.icon className="w-4 h-4 text-prpl" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{s.label}</p>
-                  </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 shrink-0 group-hover:text-prpl transition" />
-                </button>
-              ))}
+        <div className="ai-conv-list">
+          {conversations.length === 0 ? (
+            <p className="ai-conv-empty">No conversations yet</p>
+          ) : (
+            conversations.map(conv => (
+              <ConversationItem
+                key={conv.id}
+                conv={conv}
+                isActive={conv.id === activeConvId}
+                onSelect={loadConversation}
+                onDelete={deleteConversation}
+              />
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* ── Main Chat Area ── */}
+      <main className="ai-main">
+        {/* Header */}
+        <header className="ai-header">
+          <div className="ai-header-left">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="ai-header-btn"
+              title="Toggle history"
+            >
+              {sidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
+            </button>
+            <div className="ai-header-brand">
+              <div className="ai-header-logo">
+                <Bot className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="ai-header-title">HireX AI</h1>
+                <p className="ai-header-subtitle">
+                  <span className="ai-status-dot" />
+                  Recruitment Assistant
+                </p>
+              </div>
             </div>
           </div>
-        ) : (
-          /* Messages */
-          <div className="space-y-6">
-            {messages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
-            ))}
-            {isTyping && (
-              <div className="flex gap-3 animate-fade-in">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-prpl to-purple-600 flex items-center justify-center shrink-0 shadow-[0_2px_8px_rgba(124,58,237,0.25)]">
-                  <Bot className="w-4 h-4 text-white" />
-                </div>
-                <div className="rounded-2xl surface-elevated px-4 py-2.5">
-                  <TypingIndicator />
+          <div className="ai-header-right">
+            {messages.length > 0 && (
+              <button onClick={startNewChat} className="ai-header-btn ai-header-btn--clear" title="New chat">
+                <RotateCcw className="w-4 h-4" />
+                <span className="hidden sm:inline">New Chat</span>
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Messages */}
+        <div className="ai-messages-area">
+          {loadingHistory ? (
+            <div className="ai-messages-loading">
+              <Loader2 className="w-6 h-6 animate-spin text-prpl" />
+              <p>Loading conversation...</p>
+            </div>
+          ) : messages.length === 0 ? (
+            /* ── Empty State ── */
+            <div className="ai-empty-state">
+              <div className="ai-empty-glow">
+                <div className="ai-empty-icon">
+                  <Sparkles className="w-8 h-8 text-prpl" />
                 </div>
               </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-        )}
-      </div>
+              <h2 className="ai-empty-title">{greeting}</h2>
+              <p className="ai-empty-desc">
+                I'm your HireX AI assistant. Ask me anything about recruitment, candidates, interviews, or platform features.
+              </p>
 
-      {/* Input area */}
-      <div className="mt-4">
-        <div className="relative glass-panel rounded-2xl shadow-lg">
-          <div className="flex items-end gap-3 p-3">
-            <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about candidates, positions, or hiring pipeline..."
-                rows={1}
-                className="w-full bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none resize-none py-2 px-1 max-h-32"
-              />
+              <div className="ai-suggestions-grid">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={() => sendMessage(s.prompt)}
+                    className="ai-suggestion-card"
+                  >
+                    <div className="ai-suggestion-icon">
+                      <s.icon className="w-4 h-4 text-prpl" />
+                    </div>
+                    <span className="ai-suggestion-label">{s.label}</span>
+                    <ArrowRight className="w-3.5 h-3.5 opacity-30 shrink-0" />
+                  </button>
+                ))}
+              </div>
             </div>
+          ) : (
+            /* ── Chat Messages ── */
+            <div className="ai-messages-list">
+              {messages.map((msg, i) => (
+                <MessageBubble key={i} message={msg} />
+              ))}
+              {isTyping && <ThinkingSkeleton />}
+              <div ref={chatEndRef} />
+            </div>
+          )}
+        </div>
+
+        {/* Input Area */}
+        <div className="ai-input-area">
+          <div className="ai-input-container">
+            <textarea
+              ref={(el) => { inputRef.current = el; textareaRef.current = el; }}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about candidates, positions, interviews, or any HireX feature..."
+              rows={1}
+              className="ai-input-textarea"
+            />
             <button
               onClick={() => sendMessage()}
               disabled={!input.trim() || isTyping}
-              className="btn-magnetic w-10 h-10 rounded-xl bg-gradient-to-br from-prpl to-purple-600 text-white flex items-center justify-center shrink-0 shadow-[0_4px_12px_rgba(124,58,237,0.3)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="ai-send-btn"
             >
               {isTyping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </div>
+          <p className="ai-input-footer">
+            HireX AI · Specialized in recruitment platform assistance
+          </p>
         </div>
-        <p className="text-center text-[10px] text-slate-400 dark:text-slate-500 mt-2">
-          HireX AI — specialized in recruitment features only.
-        </p>
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,5 +1,16 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { projectsApi, aiApi } from '../api';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip as ChartTooltip,
+  Legend,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
 import {
   BarChart3,
   TrendingUp,
@@ -20,6 +31,8 @@ import {
   CheckCircle,
   Calendar,
 } from 'lucide-react';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, ChartTooltip, Legend);
 
 /* ── Icon map for dynamic recommendations ───── */
 const CATEGORY_ICONS = {
@@ -65,7 +78,7 @@ function Skeleton({ className = '' }) {
 function MiniBarChart({ data, color = 'bg-prpl' }) {
   const max = Math.max(...data, 1);
   return (
-    <div className="flex items-end gap-1 h-12">
+    <div className="flex items-end gap-1 h-[60px]">
       {data.map((val, i) => (
         <div
           key={i}
@@ -100,6 +113,177 @@ function FunnelStep({ label, value, total, color, delay }) {
   );
 }
 
+/* ── Line colors for positions ────────────────── */
+const LINE_COLORS = [
+  '#F472B6',  // pink
+  '#38BDF8',  // sky-blue
+  '#FBBF24',  // amber/gold
+  '#34D399',  // emerald
+  '#A78BFA',  // violet
+  '#FB923C',  // orange
+  '#2DD4BF',  // teal
+  '#F87171',  // red
+];
+
+/* ── Applications by Position — Line Chart ───── */
+function PositionChart({ positionWeekly, weekLabels }) {
+  const chartRef = useRef(null);
+
+  const positions = useMemo(() => {
+    const data = (positionWeekly || []).map(p => ({
+      title: p.title || 'Untitled',
+      weekdays: p.data || [0, 0, 0, 0, 0, 0, 0],
+      total: (p.data || []).reduce((a, b) => a + b, 0),
+    }));
+    data.sort((a, b) => b.total - a.total);
+    return data;
+  }, [positionWeekly]);
+
+  const totalApplications = useMemo(() => positions.reduce((s, p) => s + p.total, 0), [positions]);
+
+  const labels = useMemo(() => weekLabels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], [weekLabels]);
+
+  /* Build Chart.js datasets — one line per position */
+  const chartData = useMemo(() => ({
+    labels,
+    datasets: positions.map((pos, i) => {
+      const color = LINE_COLORS[i % LINE_COLORS.length];
+      return {
+        label: pos.title,
+        data: pos.weekdays,
+        borderColor: color,
+        backgroundColor: color + '18',
+        pointBackgroundColor: color,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+        tension: 0.4,
+        fill: true,
+      };
+    }),
+  }), [positions, labels]);
+
+  /* Apply gradient fills after chart renders */
+  const applyGradients = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const ctx = chart.ctx;
+    const chartArea = chart.chartArea;
+    if (!chartArea) return;
+
+    chart.data.datasets.forEach((ds, i) => {
+      const color = LINE_COLORS[i % LINE_COLORS.length];
+      const grad = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+      grad.addColorStop(0, color + '30');
+      grad.addColorStop(0.6, color + '08');
+      grad.addColorStop(1, color + '00');
+      ds.backgroundColor = grad;
+    });
+    chart.update('none');
+  }, [positions]);
+
+  useEffect(() => {
+    const timer = setTimeout(applyGradients, 150);
+    return () => clearTimeout(timer);
+  }, [applyGradients, chartData]);
+
+  const options = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 1000, easing: 'easeOutQuart' },
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { left: 4, right: 8, top: 8, bottom: 4 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(15,23,42,0.92)',
+        titleFont: { family: 'Inter, system-ui, sans-serif', size: 12, weight: '600' },
+        bodyFont: { family: 'Inter, system-ui, sans-serif', size: 11 },
+        padding: { x: 14, y: 10 },
+        cornerRadius: 10,
+        boxPadding: 4,
+        usePointStyle: true,
+        callbacks: {
+          label: (item) => ` ${item.dataset.label}: ${item.raw} application${item.raw !== 1 ? 's' : ''}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(148,163,184,0.06)', drawTicks: false },
+        border: { display: false },
+        ticks: {
+          font: { family: 'Inter, system-ui, sans-serif', size: 11, weight: '500' },
+          color: '#94A3B8',
+          padding: 8,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(148,163,184,0.06)', drawTicks: false },
+        border: { display: false },
+        ticks: {
+          font: { family: 'Inter, system-ui, sans-serif', size: 10, weight: '500' },
+          color: '#94A3B8',
+          padding: 8,
+          stepSize: 1,
+        },
+      },
+    },
+  }), []);
+
+  return (
+    <div className="rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '400ms' }}>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Applications by Position</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Weekly distribution per position</p>
+        </div>
+        <div className="w-8 h-8 rounded-lg bg-accent/8 dark:bg-accent/15 flex items-center justify-center">
+          <BarChart3 className="w-4 h-4 text-accent" />
+        </div>
+      </div>
+
+      {positions.length === 0 ? (
+        <div className="text-center py-8">
+          <Briefcase className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+          <p className="text-xs text-slate-400 dark:text-slate-500">No positions created yet</p>
+        </div>
+      ) : (
+        <>
+          {/* Color legend */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
+            {positions.map((pos, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: LINE_COLORS[i % LINE_COLORS.length] }}
+                />
+                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 truncate max-w-[120px]">
+                  {pos.title}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ height: 260 }}>
+            <Line ref={chartRef} data={chartData} options={options} />
+          </div>
+
+          <div className="pt-3 mt-1 border-t border-slate-200/40 dark:border-white/[0.04] flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">This week's applications</span>
+            <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              <AnimatedNumber value={totalApplications} />
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Analytics() {
   const [stats, setStats] = useState(null);
   const [projects, setProjects] = useState([]);
@@ -125,15 +309,16 @@ export default function Analytics() {
   const buildPayload = () => {
     const totalPositions = projects.reduce((sum, p) => sum + (p.Profiles?.length || 0), 0);
     const tc = stats?.totalCandidates || 0;
+    const funnel = stats?.funnelCounts || {};
     return {
       totalProjects: stats?.totalProjects || 0,
       activeProjects: stats?.activeProjects || 0,
       totalCandidates: tc,
       totalPositions,
-      screened: Math.round(tc * 0.72),
-      interviewed: Math.round(tc * 0.35),
-      offered: Math.round(tc * 0.15),
-      hired: Math.round(tc * 0.08),
+      screened: (funnel.selected || 0) + (funnel.validated || 0) + (funnel.hired || 0),
+      interviewed: stats?.totalInterviews || 0,
+      offered: (funnel.validated || 0) + (funnel.hired || 0),
+      hired: funnel.hired || 0,
     };
   };
 
@@ -202,13 +387,15 @@ export default function Analytics() {
   const totalPositions = projects.reduce((sum, p) => sum + (p.Profiles?.length || 0), 0);
 
   const applied = totalCandidates;
-  const screened = Math.round(totalCandidates * 0.72);
-  const interviewed = Math.round(totalCandidates * 0.35);
-  const offered = Math.round(totalCandidates * 0.15);
-  const hired = Math.round(totalCandidates * 0.08);
+  const funnel = stats?.funnelCounts || {};
+  const screened = (funnel.selected || 0) + (funnel.validated || 0) + (funnel.hired || 0);
+  const interviewed = stats?.totalInterviews ?? 0;
+  const offered = (funnel.validated || 0) + (funnel.hired || 0);
+  const hired = funnel.hired || 0;
 
-  const weeklyApplications = [3, 5, 2, 8, 4, 7, 6];
-  const weeklyInterviews = [1, 2, 1, 3, 2, 4, 2];
+  const weeklyApplications = stats?.weeklyApplications || [0, 0, 0, 0, 0, 0, 0];
+  const weeklyInterviews = stats?.weeklyInterviews || [0, 0, 0, 0, 0, 0, 0];
+  const weekLabels = stats?.weekLabels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const metricCards = [
     {
@@ -319,56 +506,11 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Weekly activity */}
-        <div className="rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '400ms' }}>
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Weekly Activity</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Applications & interviews this week</p>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-accent/8 dark:bg-accent/15 flex items-center justify-center">
-              <BarChart3 className="w-4 h-4 text-accent" />
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-prpl" />
-                  Applications
-                </span>
-                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                  {weeklyApplications.reduce((a, b) => a + b, 0)} total
-                </span>
-              </div>
-              <MiniBarChart data={weeklyApplications} color="bg-prpl" />
-              <div className="flex justify-between mt-1.5">
-                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-                  <span key={i} className="text-[9px] text-slate-400 dark:text-slate-500 flex-1 text-center">{d}</span>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-accent" />
-                  Interviews
-                </span>
-                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                  {weeklyInterviews.reduce((a, b) => a + b, 0)} total
-                </span>
-              </div>
-              <MiniBarChart data={weeklyInterviews} color="bg-accent" />
-              <div className="flex justify-between mt-1.5">
-                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-                  <span key={i} className="text-[9px] text-slate-400 dark:text-slate-500 flex-1 text-center">{d}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Applications by Position — Chart.js */}
+        <PositionChart
+          positionWeekly={stats?.positionWeekly}
+          weekLabels={stats?.weekLabels}
+        />
       </div>
 
       {/* AI Insights */}
@@ -467,48 +609,78 @@ export default function Analytics() {
         </div>
 
         {/* Performance score */}
-        <div className="rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '600ms' }}>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-5">Pipeline Health</h3>
-          <div className="flex items-center justify-center mb-6">
-            <div className="relative w-32 h-32">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r="52" stroke="currentColor" strokeWidth="8" fill="none" className="text-slate-100 dark:text-slate-800" />
-                <circle
-                  cx="60" cy="60" r="52"
-                  stroke="url(#scoreGradient)" strokeWidth="8" fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 52}`}
-                  strokeDashoffset={`${2 * Math.PI * 52 * (1 - 0.78)}`}
-                  className="transition-all duration-1000 ease-out"
-                />
-                <defs>
-                  <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#7C3AED" />
-                    <stop offset="100%" stopColor="#3B82F6" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">78%</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Health Score</span>
+        {(() => {
+          // ── Compute Pipeline Health from real data ──
+          const totalInt = stats?.totalInterviews ?? 0;
+          const rankedCount = projects.reduce((sum, p) =>
+            sum + (p.Profiles || []).reduce((s2, pr) =>
+              s2 + (pr.Candidates || []).filter(c => c.score_value != null).length, 0), 0);
+          const respondedCount = projects.reduce((sum, p) =>
+            sum + (p.Profiles || []).reduce((s2, pr) =>
+              s2 + (pr.Candidates || []).filter(c => c.status !== 'received').length, 0), 0);
+          const validatedCount = projects.reduce((sum, p) =>
+            sum + (p.Profiles || []).reduce((s2, pr) =>
+              s2 + (pr.Candidates || []).filter(c => c.status === 'validated').length, 0), 0);
+
+          const responseRate = totalCandidates > 0 ? Math.round((respondedCount / totalCandidates) * 100) : 0;
+          const screeningRate = totalCandidates > 0 ? Math.round((rankedCount / totalCandidates) * 100) : 0;
+          const interviewRate = totalCandidates > 0 ? Math.round((totalInt / totalCandidates) * 100) : 0;
+          const fillRate = totalPositions > 0 ? Math.round((validatedCount / totalPositions) * 100) : 0;
+
+          // Weighted health score
+          const healthScore = totalCandidates > 0
+            ? Math.min(100, Math.round(responseRate * 0.3 + screeningRate * 0.3 + interviewRate * 0.2 + fillRate * 0.2))
+            : 0;
+          const healthFraction = healthScore / 100;
+
+          const metrics = [
+            { label: 'Response rate', value: `${responseRate}%`, good: responseRate >= 50 },
+            { label: 'Screening rate', value: `${screeningRate}%`, good: screeningRate >= 40 },
+            { label: 'Interview rate', value: `${interviewRate}%`, good: interviewRate >= 20 },
+            { label: 'Fill rate', value: `${fillRate}%`, good: fillRate >= 30 },
+          ];
+
+          return (
+            <div className="rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '600ms' }}>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-5">Pipeline Health</h3>
+              <div className="flex items-center justify-center mb-6">
+                <div className="relative w-32 h-32">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="52" stroke="currentColor" strokeWidth="8" fill="none" className="text-slate-100 dark:text-slate-800" />
+                    <circle
+                      cx="60" cy="60" r="52"
+                      stroke="url(#scoreGradient)" strokeWidth="8" fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 52}`}
+                      strokeDashoffset={`${2 * Math.PI * 52 * (1 - healthFraction)}`}
+                      className="transition-all duration-1000 ease-out"
+                    />
+                    <defs>
+                      <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#7C3AED" />
+                        <stop offset="100%" stopColor="#3B82F6" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-bold text-slate-900 dark:text-slate-100"><AnimatedNumber value={healthScore} />%</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Health Score</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {metrics.map(item => (
+                  <div key={item.label} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">{item.label}</span>
+                    <span className={`text-xs font-semibold ${item.good ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {item.value}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-          <div className="space-y-3">
-            {[
-              { label: 'Response rate', value: '92%', good: true },
-              { label: 'Fill rate', value: '45%', good: false },
-              { label: 'Candidate satisfaction', value: '88%', good: true },
-            ].map(item => (
-              <div key={item.label} className="flex items-center justify-between">
-                <span className="text-xs text-slate-600 dark:text-slate-300">{item.label}</span>
-                <span className={`text-xs font-semibold ${item.good ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+          );
+        })()}
       </div>
     </div>
   );

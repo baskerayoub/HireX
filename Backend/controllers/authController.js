@@ -20,6 +20,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    if (user.status === "Inactive") {
+      return res.status(403).json({ error: "Your account is inactive. Please contact an administrator." });
+    }
+
     // Compare password (assuming old db might not have hashed passwords, we check both)
     // For migration, if it matches plain text, we should probably hash it later, but here we just check bcrypt or plain.
     const isMatch = await bcrypt.compare(password, user.password).catch(() => false);
@@ -47,6 +51,9 @@ exports.login = async (req, res) => {
         must_change_password: user.must_change_password,
         avatar: user.avatar,
         country: user.country,
+        bio: user.bio,
+        location: user.location,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {
@@ -103,6 +110,9 @@ exports.signup = async (req, res) => {
         role: newUser.role,
         avatar: newUser.avatar,
         country: newUser.country,
+        bio: newUser.bio,
+        location: newUser.location,
+        createdAt: newUser.createdAt,
       },
     });
   } catch (error) {
@@ -114,7 +124,7 @@ exports.signup = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { firstName, lastName, email, country } = req.body;
+    const { firstName, lastName, email, country, bio, location } = req.body;
 
     const user = await users.findByPk(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -124,6 +134,8 @@ exports.updateProfile = async (req, res) => {
     if (lastName !== undefined) updates.lastName = lastName.trim();
     if (email !== undefined) updates.email = email.trim().toLowerCase();
     if (country !== undefined) updates.country = country;
+    if (bio !== undefined) updates.bio = bio;
+    if (location !== undefined) updates.location = location;
 
     // Handle avatar file upload
     if (req.file) {
@@ -142,6 +154,8 @@ exports.updateProfile = async (req, res) => {
         role: user.role,
         avatar: user.avatar,
         country: user.country,
+        bio: user.bio,
+        location: user.location,
         createdAt: user.createdAt,
       },
     });

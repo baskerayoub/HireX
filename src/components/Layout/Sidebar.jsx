@@ -77,9 +77,10 @@ export default function Sidebar() {
   return (
     <aside
       className={cn(
-        'shrink-0 flex flex-col h-screen sticky top-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        'shrink-0 flex-col h-screen sticky top-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
         'bg-white/80 dark:bg-[#0D0F14]/90 backdrop-blur-xl',
         'border-r border-slate-200/50 dark:border-white/[0.04]',
+        'hidden md:flex', // ← hide on mobile
         collapsed ? 'w-[72px]' : 'w-[260px]',
       )}
     >
@@ -88,10 +89,11 @@ export default function Sidebar() {
         'flex items-center h-[64px] border-b border-slate-200/50 dark:border-white/[0.04] shrink-0',
         collapsed ? 'justify-center px-3' : 'px-6 gap-3',
       )}>
-        <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-prpl to-purple-600 shadow-[0_4px_12px_rgba(124,58,237,0.3)]">
-          <span className="text-white font-bold text-sm">H</span>
-          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-white dark:border-[#0D0F14]" />
-        </div>
+        <img
+          src="/NewLogo.png"
+          alt="HireX logo"
+          className="w-10 h-10 object-contain"
+        />
         {!collapsed && (
           <div className="flex items-center gap-2 min-w-0">
             <h2 className="font-splatink text-[1.7rem] text-prpl leading-none tracking-tight">HireX</h2>

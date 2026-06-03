@@ -1,0 +1,201 @@
+@startuml HireX_Improved_Class_Diagram
+title HireX - Improved Class Diagram
+
+left to right direction
+hide circle
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+
+class User {
+  -id
+  -firstName
+  -lastName
+  -email
+  -password
+  -role
+  -status
+  +login()
+  +register()
+  +updateProfile()
+}
+
+class Admin {
+  +createUser()
+  +updateUser()
+  +deleteUser()
+  +manageUsers()
+}
+
+class Recruiter {
+  -companyName
+  +createProject()
+  +createJobOffer()
+  +publishJob()
+  +viewCandidates()
+  +scheduleInterview()
+  +generateContract()
+}
+
+class Candidate {
+  -phone
+  -location
+  -experience
+  -status
+  +applyForJob()
+  +uploadCV()
+  +viewApplicationStatus()
+}
+
+class Project {
+  -id
+  -title
+  -description
+  -department
+  -status
+  -startDate
+  -endDate
+  +archiveProject()
+  +updateStatus()
+}
+
+class JobOffer {
+  -id
+  -title
+  -description
+  -location
+  -experience
+  -contractType
+  -status
+  +generateDescriptionAI()
+  +publish()
+}
+
+class JobPosting {
+  -id
+  -platform
+  -url
+  -status
+  +publishToPlatform()
+}
+
+class Application {
+  -id
+  -applicationDate
+  -status
+  +submitApplication()
+  +updateStatus()
+}
+
+class CV {
+  -id
+  -fileName
+  -filePath
+  -hash
+  +upload()
+  +parseCV()
+}
+
+class AI_Analysis {
+  -id
+  -score
+  -matchPercentage
+  -summary
+  -recommendation
+  +analyzeCV()
+  +calculateScore()
+  +generateRecommendations()
+}
+
+class Skill {
+  -id
+  -name
+  -category
+  +addSkill()
+}
+
+class Interview {
+  -id
+  -date
+  -startTime
+  -endTime
+  -type
+  -status
+  -meetingLink
+  +scheduleInterview()
+  +sendInvitation()
+  +cancelInterview()
+}
+
+class Feedback {
+  -id
+  -comments
+  -createdAt
+  +addFeedback()
+}
+
+class Contract {
+  -id
+  -type
+  -workMode
+  -startDate
+  -salary
+  -position
+  +generateContract()
+  +downloadContract()
+}
+
+class Template {
+  -id
+  -name
+  -format
+  -filePath
+  +createTemplate()
+  +fillTemplate()
+}
+
+class LinkedInPost {
+  -id
+  -content
+  -postUrl
+  -publishedAt
+  +generatePostAI()
+  +publishPost()
+}
+
+' Inheritance
+User <|-- Admin
+User <|-- Recruiter
+User <|-- Candidate
+
+' Main relationships
+Recruiter "1" -- "0..*" Project : creates
+Project "1" -- "0..*" JobOffer : contains
+Recruiter "1" -- "0..*" JobOffer : manages
+
+JobOffer "1" -- "0..*" Application : receives
+Candidate "1" -- "0..*" Application : submits
+Application "1" -- "1" CV : includes
+Application "1" -- "0..1" AI_Analysis : analyzed by
+
+JobOffer "1" -- "0..*" Skill : requires
+CV "1" -- "0..*" Skill : contains
+AI_Analysis ..> Skill : extracts
+
+JobOffer "1" -- "0..*" JobPosting : published as
+Recruiter "1" -- "0..*" LinkedInPost : publishes
+LinkedInPost "0..*" -- "1" JobOffer : promotes
+
+Recruiter "1" -- "0..*" Interview : schedules
+Candidate "1" -- "0..*" Interview : attends
+Application "1" -- "0..*" Interview : interview process
+Interview "1" -- "0..1" Feedback : has
+Recruiter "1" -- "0..*" Feedback : writes
+
+Candidate "1" -- "0..*" Contract : receives
+Recruiter "1" -- "0..*" Contract : generates
+Contract "1" -- "1" Template : uses
+
+Admin "1" -- "0..*" User : manages
+
+@enduml

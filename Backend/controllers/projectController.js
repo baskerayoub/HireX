@@ -1,5 +1,6 @@
-const { project, profile, users, user_project, candidate, JobOffer, JobPosting } = require("../models");
+const { project, profile, users, user_project, candidate, meeting, JobOffer, JobPosting } = require("../models");
 const { Op } = require("sequelize");
+const sequelize = require("sequelize");
 
 // Create a new recruitment project
 exports.create = async (req, res) => {
@@ -195,10 +196,31 @@ exports.getStats = async (req, res) => {
     let totalCandidates = 0;
     let totalInterviews = 0;
 
+    // ── Weekly activity data (last 7 days) ──
+    const weeklyApplications = [0, 0, 0, 0, 0, 0, 0]; // Mon-Sun
+    const weeklyInterviews = [0, 0, 0, 0, 0, 0, 0];
+    let positionWeekly = [];
+    const weekLabels = [];
+
+    // Calculate date range: last 7 days ending today
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    // Build labels for the last 7 days
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sevenDaysAgo);
+      d.setDate(d.getDate() + i);
+      weekLabels.push(dayNames[d.getDay()]);
+    }
+
     if (pIds.length > 0) {
       const profiles = await profile.findAll({
         where: { fk_project: { [Op.in]: pIds } },
-        attributes: ["id"],
+        attributes: ["id", "title"],
         raw: true,
       });
       const profileIds = profiles.map((p) => p.id);
@@ -206,6 +228,119 @@ exports.getStats = async (req, res) => {
       if (profileIds.length > 0) {
         totalCandidates = await candidate.count({
           where: { fk_profile: { [Op.in]: profileIds } },
+        });
+
+        // ── Weekly Applications: count candidates created per day ──
+        const candidatesByDay = await candidate.findAll({
+          where: {
+            fk_profile: { [Op.in]: profileIds },
+            created_at: { [Op.between]: [sevenDaysAgo, today] },
+          },
+          attributes: [
+            [candidate.sequelize.fn('DATE', candidate.sequelize.col('candidate.created_at')), 'day'],
+            [candidate.sequelize.fn('COUNT', candidate.sequelize.col('candidate.id')), 'count'],
+          ],
+          group: [candidate.sequelize.fn('DATE', candidate.sequelize.col('candidate.created_at'))],
+          raw: true,
+        });
+
+        // Map DB results to the 7-day array
+        candidatesByDay.forEach((row) => {
+          const rowDate = new Date(row.day);
+          const diffDays = Math.floor((rowDate - sevenDaysAgo) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 0 && diffDays < 7) {
+            weeklyApplications[diffDays] = parseInt(row.count) || 0;
+          }
+        });
+
+        // ── Weekly Interviews: count meetings created per day ──
+        const candidateIds = await candidate.findAll({
+          where: { fk_profile: { [Op.in]: profileIds } },
+          attributes: ["id"],
+          raw: true,
+        });
+        const candIds = candidateIds.map((c) => c.id);
+
+        if (candIds.length > 0 && meeting) {
+          totalInterviews = await meeting.count({
+            where: { fk_candidate: { [Op.in]: candIds } },
+          });
+
+          const meetingsByDay = await meeting.findAll({
+            where: {
+              fk_candidate: { [Op.in]: candIds },
+              createdAt: { [Op.between]: [sevenDaysAgo, today] },
+            },
+            attributes: [
+              [meeting.sequelize.fn('DATE', meeting.sequelize.col('createdAt')), 'day'],
+              [meeting.sequelize.fn('COUNT', meeting.sequelize.col('id')), 'count'],
+            ],
+            group: [meeting.sequelize.fn('DATE', meeting.sequelize.col('createdAt'))],
+            raw: true,
+          });
+
+          meetingsByDay.forEach((row) => {
+            const rowDate = new Date(row.day);
+            const diffDays = Math.floor((rowDate - sevenDaysAgo) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays < 7) {
+              weeklyInterviews[diffDays] = parseInt(row.count) || 0;
+            }
+          });
+        }
+        // ── Per-position weekly data for line chart ──
+        positionWeekly.length = 0;
+        for (const prof of profiles) {
+          const dailyCounts = [0, 0, 0, 0, 0, 0, 0];
+          const rows = await candidate.findAll({
+            where: {
+              fk_profile: prof.id,
+              created_at: { [Op.between]: [sevenDaysAgo, today] },
+            },
+            attributes: [
+              [candidate.sequelize.fn('DATE', candidate.sequelize.col('candidate.created_at')), 'day'],
+              [candidate.sequelize.fn('COUNT', candidate.sequelize.col('candidate.id')), 'count'],
+            ],
+            group: [candidate.sequelize.fn('DATE', candidate.sequelize.col('candidate.created_at'))],
+            raw: true,
+          });
+          rows.forEach((row) => {
+            const rowDate = new Date(row.day);
+            const diffDays = Math.floor((rowDate - sevenDaysAgo) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays < 7) {
+              dailyCounts[diffDays] = parseInt(row.count) || 0;
+            }
+          });
+          // Also get total count for this profile
+          const totalForProfile = await candidate.count({ where: { fk_profile: prof.id } });
+          positionWeekly.push({ id: prof.id, title: prof.title || 'Untitled', data: dailyCounts, total: totalForProfile });
+        }
+      }
+    }
+
+    // ── Funnel counts: real status breakdown ──
+    let funnelCounts = { received: 0, selected: 0, validated: 0, hired: 0, declined: 0, discarded: 0 };
+    if (pIds.length > 0) {
+      const allProfiles = await profile.findAll({
+        where: { fk_project: { [Op.in]: pIds } },
+        attributes: ["id"],
+        raw: true,
+      });
+      const allProfileIds = allProfiles.map((p) => p.id);
+      if (allProfileIds.length > 0) {
+        const statusRows = await candidate.findAll({
+          where: { fk_profile: { [Op.in]: allProfileIds } },
+          attributes: [
+            'status',
+            [candidate.sequelize.fn('COUNT', candidate.sequelize.col('candidate.id')), 'count'],
+          ],
+          group: ['status'],
+          raw: true,
+        });
+        statusRows.forEach((row) => {
+          const key = (row.status || '').toLowerCase();
+          if (key in funnelCounts) {
+            funnelCounts[key] = parseInt(row.count) || 0;
+          }
         });
       }
     }
@@ -216,6 +351,11 @@ exports.getStats = async (req, res) => {
         activeProjects,
         totalCandidates,
         totalInterviews,
+        weeklyApplications,
+        weeklyInterviews,
+        weekLabels,
+        positionWeekly: positionWeekly || [],
+        funnelCounts,
       },
     });
   } catch (error) {
@@ -223,3 +363,4 @@ exports.getStats = async (req, res) => {
     return res.status(500).json({ error: "Failed to get stats" });
   }
 };
+

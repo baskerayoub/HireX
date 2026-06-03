@@ -83,12 +83,14 @@ export default function Login() {
         {/* Logo + theme toggle */}
         <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-prpl via-purple-600 to-violet-700 flex items-center justify-center shadow-[0_8px_30px_-6px_rgba(124,58,237,0.45)]">
-              <span className="text-white font-bold text-xl">H</span>
-            </div>
+            <img
+              src="/NewLogo.png"
+              alt="HireX logo"
+              className="w-15 h-15 object-contain"
+            />
             <div>
               <h1 className="font-splatink text-[1.6rem] text-prpl leading-none">HireX</h1>
-              <p className="text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.25em] mt-0.5">AI Recruitment</p>
+              <p className="text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.25em] mt-0.5">Smart Recruitment</p>
             </div>
           </div>
           <button

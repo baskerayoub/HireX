@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { users } = require("../models");
 require("dotenv").config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key_hirex";
@@ -8,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key_hirex";
  * Extracts Bearer token from Authorization header and verifies it.
  * Attaches decoded user payload to req.user
  */
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -19,6 +20,16 @@ function authenticate(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Check if user still exists and is not Inactive
+    const user = await users.findByPk(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: "User no longer exists." });
+    }
+    if (user.status === "Inactive") {
+      return res.status(401).json({ error: "Your account is inactive. Please contact an administrator." });
+    }
+
     req.user = decoded; // { id, email, role }
     next();
   } catch (err) {

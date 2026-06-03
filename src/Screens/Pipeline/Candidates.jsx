@@ -9,7 +9,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import ProgressRing from '../../components/ui/ProgressRing';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import { Users, Search, Plus, Brain, Eye, Sparkles, Download, FileText, Mail, Phone, MapPin, Briefcase, CheckCircle2, XCircle, ThumbsUp, ThumbsDown, CalendarDays, Loader2, Shield, TrendingUp, Zap, ListChecks, Trash2 } from 'lucide-react';
+import { Users, Search, Plus, Brain, Eye, Sparkles, Download, FileText, Mail, Phone, MapPin, Briefcase, CheckCircle2, XCircle, ThumbsUp, ThumbsDown, CalendarDays, Loader2, Shield, TrendingUp, Zap, ListChecks, Trash2, UserCheck } from 'lucide-react';
 
 export default function Candidates() {
   const { projectId } = useParams();
@@ -178,6 +178,24 @@ export default function Candidates() {
     catch (err) { console.error(err); }
   };
 
+  const handleHire = async (candidate) => {
+    const ok = await confirm({
+      title: 'Hire Candidate',
+      message: `Hire "${candidate.name || 'this candidate'}"? This will mark them as hired and complete all associated interviews.`,
+      confirmText: 'Confirm Hire',
+      variant: 'info',
+    });
+    if (!ok) return;
+    try {
+      await candidatesApi.hire(candidate.id);
+      toast.success(`${candidate.name || 'Candidate'} has been hired! 🎉`);
+      load();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to hire candidate');
+    }
+  };
+
   // Schedule interview
   const openSchedule = (candidate) => {
     setScheduleTarget(candidate);
@@ -261,6 +279,7 @@ export default function Candidates() {
           <option value="received">Received</option>
           <option value="selected">Selected</option>
           <option value="validated">Validated</option>
+          <option value="hired">✅ Hired</option>
           <option value="Declined">Declined</option>
         </select>
         <select value={scoreFilter} onChange={(e) => setScoreFilter(e.target.value)}
@@ -324,6 +343,7 @@ export default function Candidates() {
                       <option value="received">Received</option>
                       <option value="selected">Selected</option>
                       <option value="validated">Validated</option>
+                      <option value="hired">✅ Hired</option>
                       <option value="Declined">Declined</option>
                       <option value="discarded">Discarded</option>
                     </select>
@@ -339,6 +359,12 @@ export default function Candidates() {
                         <button onClick={() => handleRankInline(c.id)} disabled={rankingInline[c.id]}
                           className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-prpl hover:bg-prpl/8 dark:hover:bg-prpl/12 transition disabled:opacity-50" title="Rank with AI">
                           {rankingInline[c.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        </button>
+                      )}
+                      {c.status !== 'hired' && (
+                        <button onClick={() => handleHire(c)}
+                          className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-emerald-600 hover:bg-emerald-500/8 dark:hover:bg-emerald-500/12 transition" title="Hire Candidate">
+                          <UserCheck className="w-4 h-4" />
                         </button>
                       )}
                       <button onClick={() => openSchedule(c)}
@@ -665,8 +691,6 @@ export default function Candidates() {
                   className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition">
                   <option value="Interview">Interview</option>
                   <option value="Technical Test">Technical Test</option>
-                  <option value="HR Screen">HR Screen</option>
-                  <option value="Final Round">Final Round</option>
                 </select>
               </div>
             </div>
@@ -693,9 +717,9 @@ export default function Candidates() {
                   onChange={e => setScheduleForm({...scheduleForm, platform: e.target.value})}
                   className="w-full h-11 px-4 rounded-xl border border-slate-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03] text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-prpl focus:ring-2 focus:ring-prpl/15 transition">
                   <option value="Google Meet">Google Meet</option>
-                  <option value="Zoom">Zoom</option>
                   <option value="Microsoft Teams">Microsoft Teams</option>
-                  <option value="In-Person">In-Person</option>
+                  <option value="In-Person">F2F</option>
+                  <option value="In-Person">Other</option>
                 </select>
               </div>
               <div>
