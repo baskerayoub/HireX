@@ -17,6 +17,7 @@ import {
   CalendarCheck2,
   FileCheck2,
   TrendingUp,
+  TrendingDown,
   Zap,
   Clock,
   Target,
@@ -72,7 +73,26 @@ function SkeletonRow() {
   );
 }
 
-/* ── AI Features data ─────────────────────────── */
+function formatTrend(trend = {}) {
+  const current = Number(trend.current) || 0;
+  const previous = Number(trend.previous) || 0;
+  const diff = current - previous;
+
+  if (previous === 0) {
+    return {
+      label: current > 0 ? `+${current}` : '0%',
+      trendUp: diff >= 0,
+    };
+  }
+
+  const percent = Math.round((diff / previous) * 100);
+  return {
+    label: `${percent > 0 ? '+' : ''}${percent}%`,
+    trendUp: percent >= 0,
+  };
+}
+
+/* AI Features data */
 const aiFeatures = [
   {
     icon: FileText,
@@ -157,13 +177,17 @@ export default function Workspace() {
     );
   }
 
+  const projectTrend = formatTrend(stats?.trends?.totalProjects);
+  const activeTrend = formatTrend(stats?.trends?.activeProjects);
+  const candidateTrend = formatTrend(stats?.trends?.totalCandidates);
+
   const statCards = [
     {
       label: 'Total Projects',
       value: stats?.totalProjects ?? 0,
       icon: FolderKanban,
-      trend: '+12%',
-      trendUp: true,
+      trend: projectTrend.label,
+      trendUp: projectTrend.trendUp,
       gradient: 'from-violet-500 to-purple-600',
       bgGradient: 'from-violet-500/8 to-purple-500/8 dark:from-violet-500/12 dark:to-purple-500/12',
     },
@@ -171,8 +195,8 @@ export default function Workspace() {
       label: 'Active Hiring',
       value: stats?.activeProjects ?? 0,
       icon: Target,
-      trend: '+8%',
-      trendUp: true,
+      trend: activeTrend.label,
+      trendUp: activeTrend.trendUp,
       gradient: 'from-blue-500 to-cyan-600',
       bgGradient: 'from-blue-500/8 to-cyan-500/8 dark:from-blue-500/12 dark:to-cyan-500/12',
     },
@@ -180,8 +204,8 @@ export default function Workspace() {
       label: 'Total Candidates',
       value: stats?.totalCandidates ?? 0,
       icon: Users,
-      trend: '+24%',
-      trendUp: true,
+      trend: candidateTrend.label,
+      trendUp: candidateTrend.trendUp,
       gradient: 'from-emerald-500 to-teal-600',
       bgGradient: 'from-emerald-500/8 to-teal-500/8 dark:from-emerald-500/12 dark:to-teal-500/12',
     },
@@ -246,7 +270,7 @@ export default function Workspace() {
                   <stat.icon className="w-5 h-5 text-white" />
                 </div>
                 <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${stat.trendUp ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10' : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10'}`}>
-                  <TrendingUp className="w-3 h-3" />
+                  {stat.trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                   {stat.trend}
                 </div>
               </div>

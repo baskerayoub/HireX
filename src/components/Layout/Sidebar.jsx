@@ -161,7 +161,7 @@ export default function Sidebar() {
                 <span className="text-[10px] font-bold text-prpl uppercase tracking-widest">AI Powered</span>
               </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                Generate descriptions, parse CVs, and rank candidates with AI intelligence.
+                Generate job descriptions, analyze CVs, and identify top candidates using AI
               </p>
             </div>
           </div>

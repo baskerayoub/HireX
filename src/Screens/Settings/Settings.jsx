@@ -34,6 +34,7 @@ export default function Settings() {
   const [linkedinStatus, setLinkedinStatus] = useState({ connected: false });
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || user?.name || 'N/A';
 
 
   // Handle LinkedIn OAuth callback redirect
@@ -210,8 +211,7 @@ export default function Settings() {
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Your account information.</p>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {[
-                  { label: 'First Name', value: user?.firstName || user?.name?.split(' ')[0] || 'N/A' },
-                  { label: 'Last Name', value: user?.lastName || 'N/A' },
+                  { label: 'Full Name', value: fullName, span: 2 },
                   { label: 'Email', value: user?.email || 'N/A', span: 2 },
                   { label: 'Role', value: user?.role || 'Member' },
                 ].map(field => (

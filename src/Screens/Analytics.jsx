@@ -94,7 +94,7 @@ function MiniBarChart({ data, color = 'bg-prpl' }) {
 }
 
 /* ── Funnel step ──────────────────────────────── */
-function FunnelStep({ label, value, total, color, delay }) {
+function FunnelStep({ label, value, total, color, delay, caption }) {
   const percent = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${delay}ms` }}>
@@ -108,7 +108,7 @@ function FunnelStep({ label, value, total, color, delay }) {
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{percent}% conversion</p>
+      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{caption || `${percent}% conversion`}</p>
     </div>
   );
 }
@@ -390,7 +390,6 @@ export default function Analytics() {
   const funnel = stats?.funnelCounts || {};
   const screened = (funnel.selected || 0) + (funnel.validated || 0) + (funnel.hired || 0);
   const interviewed = stats?.totalInterviews ?? 0;
-  const offered = (funnel.validated || 0) + (funnel.hired || 0);
   const hired = funnel.hired || 0;
 
   const weeklyApplications = stats?.weeklyApplications || [0, 0, 0, 0, 0, 0, 0];
@@ -446,7 +445,7 @@ export default function Analytics() {
           Analytics
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Hiring performance, pipeline health, and predictive insights.
+          Hiring performance and predictive insights.
         </p>
       </div>
 
@@ -491,17 +490,17 @@ export default function Analytics() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Hiring Funnel</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Candidate conversion pipeline</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Projects, positions, and candidate conversion</p>
             </div>
             <div className="w-8 h-8 rounded-lg bg-prpl/8 dark:bg-prpl/15 flex items-center justify-center">
               <Target className="w-4 h-4 text-prpl" />
             </div>
           </div>
           <div className="space-y-5">
+            <FunnelStep label="Projects" value={totalProjects} total={totalProjects} color="bg-gradient-to-r from-indigo-500 to-indigo-400" delay={350} caption="Total projects" />
+            <FunnelStep label="Positions" value={totalPositions} total={totalPositions} color="bg-gradient-to-r from-sky-500 to-sky-400" delay={375} caption="Open positions" />
             <FunnelStep label="Applied" value={applied} total={applied} color="bg-gradient-to-r from-blue-500 to-blue-400" delay={400} />
-            <FunnelStep label="Screened" value={screened} total={applied} color="bg-gradient-to-r from-cyan-500 to-cyan-400" delay={500} />
             <FunnelStep label="Interviewed" value={interviewed} total={applied} color="bg-gradient-to-r from-violet-500 to-violet-400" delay={600} />
-            <FunnelStep label="Offered" value={offered} total={applied} color="bg-gradient-to-r from-amber-500 to-amber-400" delay={700} />
             <FunnelStep label="Hired" value={hired} total={applied} color="bg-gradient-to-r from-emerald-500 to-emerald-400" delay={800} />
           </div>
         </div>
@@ -514,9 +513,9 @@ export default function Analytics() {
       </div>
 
       {/* AI Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div>
         {/* AI Recommendations — Cached + Smart */}
-        <div className="lg:col-span-2 rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '500ms' }}>
+        <div className="rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '500ms' }}>
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-prpl/10 dark:bg-prpl/20 flex items-center justify-center">
@@ -527,7 +526,7 @@ export default function Analytics() {
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {cacheMeta?.cached
                     ? <><CheckCircle className="w-3 h-3 inline text-emerald-500 mr-1" />Cached · generated {new Date(cacheMeta.generatedAt).toLocaleString()}</>
-                    : 'Powered by OpenAI · data-driven insights'}
+                    : 'Powered by HirexAI · data insights'}
                 </p>
               </div>
             </div>
@@ -541,7 +540,7 @@ export default function Analytics() {
                 onClick={() => fetchRecommendations(true)}
                 disabled={aiLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-prpl bg-prpl/8 dark:bg-prpl/15 rounded-lg hover:bg-prpl/15 dark:hover:bg-prpl/25 transition disabled:opacity-50"
-                title="Force regenerate from OpenAI (ignores cache)"
+                title="Force regenerate from HirexAI (ignores cache)"
               >
                 <RefreshCw className={`w-3 h-3 ${aiLoading ? 'animate-spin' : ''}`} />
                 {aiLoading ? 'Analyzing...' : 'Regenerate AI Insights'}
@@ -608,79 +607,6 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Performance score */}
-        {(() => {
-          // ── Compute Pipeline Health from real data ──
-          const totalInt = stats?.totalInterviews ?? 0;
-          const rankedCount = projects.reduce((sum, p) =>
-            sum + (p.Profiles || []).reduce((s2, pr) =>
-              s2 + (pr.Candidates || []).filter(c => c.score_value != null).length, 0), 0);
-          const respondedCount = projects.reduce((sum, p) =>
-            sum + (p.Profiles || []).reduce((s2, pr) =>
-              s2 + (pr.Candidates || []).filter(c => c.status !== 'received').length, 0), 0);
-          const validatedCount = projects.reduce((sum, p) =>
-            sum + (p.Profiles || []).reduce((s2, pr) =>
-              s2 + (pr.Candidates || []).filter(c => c.status === 'validated').length, 0), 0);
-
-          const responseRate = totalCandidates > 0 ? Math.round((respondedCount / totalCandidates) * 100) : 0;
-          const screeningRate = totalCandidates > 0 ? Math.round((rankedCount / totalCandidates) * 100) : 0;
-          const interviewRate = totalCandidates > 0 ? Math.round((totalInt / totalCandidates) * 100) : 0;
-          const fillRate = totalPositions > 0 ? Math.round((validatedCount / totalPositions) * 100) : 0;
-
-          // Weighted health score
-          const healthScore = totalCandidates > 0
-            ? Math.min(100, Math.round(responseRate * 0.3 + screeningRate * 0.3 + interviewRate * 0.2 + fillRate * 0.2))
-            : 0;
-          const healthFraction = healthScore / 100;
-
-          const metrics = [
-            { label: 'Response rate', value: `${responseRate}%`, good: responseRate >= 50 },
-            { label: 'Screening rate', value: `${screeningRate}%`, good: screeningRate >= 40 },
-            { label: 'Interview rate', value: `${interviewRate}%`, good: interviewRate >= 20 },
-            { label: 'Fill rate', value: `${fillRate}%`, good: fillRate >= 30 },
-          ];
-
-          return (
-            <div className="rounded-2xl surface-primary p-6 animate-fade-in" style={{ animationDelay: '600ms' }}>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-5">Pipeline Health</h3>
-              <div className="flex items-center justify-center mb-6">
-                <div className="relative w-32 h-32">
-                  <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r="52" stroke="currentColor" strokeWidth="8" fill="none" className="text-slate-100 dark:text-slate-800" />
-                    <circle
-                      cx="60" cy="60" r="52"
-                      stroke="url(#scoreGradient)" strokeWidth="8" fill="none"
-                      strokeLinecap="round"
-                      strokeDasharray={`${2 * Math.PI * 52}`}
-                      strokeDashoffset={`${2 * Math.PI * 52 * (1 - healthFraction)}`}
-                      className="transition-all duration-1000 ease-out"
-                    />
-                    <defs>
-                      <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#7C3AED" />
-                        <stop offset="100%" stopColor="#3B82F6" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold text-slate-900 dark:text-slate-100"><AnimatedNumber value={healthScore} />%</span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Health Score</span>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {metrics.map(item => (
-                  <div key={item.label} className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 dark:text-slate-300">{item.label}</span>
-                    <span className={`text-xs font-semibold ${item.good ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                      {item.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
       </div>
     </div>
   );

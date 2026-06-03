@@ -15,6 +15,10 @@ function formatJoinDate(value) {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+function getFullName(user) {
+  return [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || user?.name || '';
+}
+
 export default function Profile() {
   const { user, updateProfile } = useAuth();
   const toast = useToast();
@@ -23,7 +27,7 @@ export default function Profile() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', bio: '', location: '' });
+  const [form, setForm] = useState({ fullName: '', email: '', bio: '', location: '' });
   const [linkedinStatus, setLinkedinStatus] = useState(null);
   const [linkedinLoading, setLinkedinLoading] = useState(true);
 
@@ -41,8 +45,7 @@ export default function Profile() {
   useEffect(() => {
     if (!user) return;
     setForm({
-      firstName: user.firstName || user.name?.split(' ')[0] || '',
-      lastName: user.lastName || '',
+      fullName: getFullName(user),
       email: user.email || '',
       bio: user.bio || '',
       location: user.location || '',
@@ -52,20 +55,17 @@ export default function Profile() {
   if (!user) return null;
   if (loadingStats) return <LoadingSpinner text="Loading profile..." />;
 
-  const fullName = `${user.firstName || user.name || ''} ${user.lastName || ''}`.trim() || 'HireX User';
+  const fullName = getFullName(user) || 'HireX User';
   const memberSince = formatJoinDate(user.createdAt || user.joinDate);
-  const initials = user?.firstName
-    ? (user.firstName[0] + (user.lastName?.[0] || '')).toUpperCase()
-    : user?.name
-      ? user.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
-      : 'HX';
+  const initials = fullName
+    ? fullName.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
+    : 'HX';
 
   // LinkedIn avatar
   const avatarUrl = linkedinStatus?.picture || user.avatarUrl || null;
 
   // Profile completion
   const completionChecks = [
-    { label: 'Name added', done: !!(user.firstName && user.lastName), icon: User },
     { label: 'Email verified', done: !!user.email, icon: Mail },
     { label: 'LinkedIn connected', done: !!linkedinStatus?.connected, icon: Link2 },
     { label: 'Location added', done: !!(user.location || form.location), icon: MapPin },
@@ -83,16 +83,19 @@ export default function Profile() {
 
   const onSave = async (event) => {
     event.preventDefault();
-    if (!form.firstName.trim() || !form.email.trim()) {
-      toast.warning('First name and email are required.');
+    if (!form.fullName.trim() || !form.email.trim()) {
+      toast.warning('Full name and email are required.');
       return;
     }
     setSaving(true);
     try {
+      const nameParts = form.fullName.trim().split(/\s+/);
+      const firstName = nameParts.shift() || '';
+      const lastName = nameParts.join(' ');
       const payload = {
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        name: `${form.firstName} ${form.lastName}`.trim(),
+        firstName,
+        lastName,
+        name: form.fullName.trim(),
         email: form.email.trim(),
         bio: form.bio.trim(),
         location: form.location.trim(),
@@ -240,19 +243,11 @@ export default function Profile() {
           </div>
 
           <form className="space-y-4" onSubmit={onSave}>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">First name</label>
-                <input disabled={!editing || saving} value={form.firstName}
-                  onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
-                  className={inputClass} placeholder="John" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">Last name</label>
-                <input disabled={!editing || saving} value={form.lastName}
-                  onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
-                  className={inputClass} placeholder="Doe" />
-              </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">Full Name</label>
+              <input disabled={!editing || saving} value={form.fullName}
+                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                className={inputClass} placeholder="John Doe" />
             </div>
 
             <div>
@@ -290,7 +285,7 @@ export default function Profile() {
               </button>
               <button type="button" disabled={!editing || saving}
                 onClick={() => {
-                  setForm({ firstName: user.firstName || user.name?.split(' ')[0] || '', lastName: user.lastName || '', email: user.email || '', bio: user.bio || '', location: user.location || '' });
+                  setForm({ fullName: getFullName(user), email: user.email || '', bio: user.bio || '', location: user.location || '' });
                   setEditing(false);
                 }}
                 className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200/70 dark:border-white/[0.08] px-5 text-sm font-medium text-slate-600 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40">

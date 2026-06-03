@@ -208,6 +208,43 @@ exports.getStats = async (req, res) => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
+    const previousSevenDaysAgo = new Date(sevenDaysAgo);
+    previousSevenDaysAgo.setDate(previousSevenDaysAgo.getDate() - 7);
+    const previousPeriodEnd = new Date(sevenDaysAgo);
+    previousPeriodEnd.setMilliseconds(previousPeriodEnd.getMilliseconds() - 1);
+
+    const currentProjects = await project.count({
+      where: {
+        ...where,
+        is_archived: false,
+        createdAt: { [Op.between]: [sevenDaysAgo, today] },
+      },
+    });
+    const previousProjects = await project.count({
+      where: {
+        ...where,
+        is_archived: false,
+        createdAt: { [Op.between]: [previousSevenDaysAgo, previousPeriodEnd] },
+      },
+    });
+    const currentActiveProjects = await project.count({
+      where: {
+        ...where,
+        status: "Active",
+        is_archived: false,
+        createdAt: { [Op.between]: [sevenDaysAgo, today] },
+      },
+    });
+    const previousActiveProjects = await project.count({
+      where: {
+        ...where,
+        status: "Active",
+        is_archived: false,
+        createdAt: { [Op.between]: [previousSevenDaysAgo, previousPeriodEnd] },
+      },
+    });
+    let currentCandidates = 0;
+    let previousCandidates = 0;
 
     // Build labels for the last 7 days
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -228,6 +265,18 @@ exports.getStats = async (req, res) => {
       if (profileIds.length > 0) {
         totalCandidates = await candidate.count({
           where: { fk_profile: { [Op.in]: profileIds } },
+        });
+        currentCandidates = await candidate.count({
+          where: {
+            fk_profile: { [Op.in]: profileIds },
+            created_at: { [Op.between]: [sevenDaysAgo, today] },
+          },
+        });
+        previousCandidates = await candidate.count({
+          where: {
+            fk_profile: { [Op.in]: profileIds },
+            created_at: { [Op.between]: [previousSevenDaysAgo, previousPeriodEnd] },
+          },
         });
 
         // ── Weekly Applications: count candidates created per day ──
@@ -356,6 +405,11 @@ exports.getStats = async (req, res) => {
         weekLabels,
         positionWeekly: positionWeekly || [],
         funnelCounts,
+        trends: {
+          totalProjects: { current: currentProjects, previous: previousProjects },
+          activeProjects: { current: currentActiveProjects, previous: previousActiveProjects },
+          totalCandidates: { current: currentCandidates, previous: previousCandidates },
+        },
       },
     });
   } catch (error) {
@@ -363,4 +417,3 @@ exports.getStats = async (req, res) => {
     return res.status(500).json({ error: "Failed to get stats" });
   }
 };
-

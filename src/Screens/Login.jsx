@@ -113,7 +113,7 @@ export default function Login() {
               {isSignup ? 'Create account' : 'Welcome back'}
             </h2>
             <p className="text-[15px] text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-              {isSignup ? 'Start your AI-powered recruitment journey.' : 'Sign in to your recruitment workspace.'}
+              {isSignup ? 'Start your recruitment journey.' : 'Sign in to your recruitment workspace.'}
             </p>
           </div>
 
@@ -205,7 +205,7 @@ export default function Login() {
 
         {/* Branding footer */}
         <p className="mt-8 text-center text-[11px] text-slate-400 dark:text-slate-600">
-          © {new Date().getFullYear()} HireX · AI-Powered Recruitment
+          © {new Date().getFullYear()} HireX · Recruitment
         </p>
       </div>
     </main>
